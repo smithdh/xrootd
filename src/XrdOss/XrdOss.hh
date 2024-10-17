@@ -414,6 +414,8 @@ uint16_t        DFType() {return dfType;}
 
 static const int Fctl_ckpObj = 0;
 static const int Fctl_utimes = 1;
+static const int Fctl_sameFs = 2;
+static const int Fctl_cdup   = 3;
 
 virtual int     Fctl(int cmd, int alen, const char *args, char **resp=0);
 
@@ -479,6 +481,7 @@ short       rsvd;    // Reserved
 #define XRDOSS_HASCACH 0x0000000000000010ULL
 #define XRDOSS_HASNAIO 0x0000000000000020ULL
 #define XRDOSS_HASRPXY 0x0000000000000040ULL
+#define XRDOSS_HASCDUP 0x0000000000000080ULL
 
 // Options that can be passed to Stat()
 //

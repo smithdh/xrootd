@@ -85,6 +85,8 @@
 #define SFS_FCTL_GETFD    1 // Return file descriptor if possible
 #define SFS_FCTL_STATV    2 // Return visa information
 #define SFS_FCTL_SPEC1    3 // Return implementation defined information
+#define SFS_FCTL_SAMEFS   4 // Require file be on the same filesystem as another
+#define SFS_FCTL_CDUP     5 // Require file have same content as another
 
 #define SFS_SFIO_FDVAL 0x80000000 // Use SendData() method GETFD response value
 

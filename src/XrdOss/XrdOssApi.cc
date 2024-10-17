@@ -765,11 +765,12 @@ int XrdOssFile::Open(const char *path, int Oflag, mode_t Mode, XrdOucEnv &Env)
       {do {retc = fstat(fd, &buf);} while(retc && errno == EINTR);
        if (!retc && !(buf.st_mode & S_IFREG))
           {close(fd); fd = (buf.st_mode & S_IFDIR ? -EISDIR : -ENOTBLK);}
+       cacheP = XrdOssCache::Find(local_path);
        if (Oflag & (O_WRONLY | O_RDWR))
-          {FSize = buf.st_size; cacheP = XrdOssCache::Find(local_path);}
+          {FSize = buf.st_size; isW = true;}
           else {if (buf.st_mode & XRDSFS_POSCPEND && fd >= 0)
                    {close(fd); fd=-ETXTBSY;}
-                FSize = -1; cacheP = 0;
+                FSize = -1; isW = false;
                }
       } else if (fd == -EEXIST)
                 {do {retc = stat(local_path,&buf);} while(retc && errno==EINTR);
@@ -813,7 +814,7 @@ int XrdOssFile::Open(const char *path, int Oflag, mode_t Mode, XrdOucEnv &Env)
 int XrdOssFile::Close(long long *retsz)
 {
     if (fd < 0) return -XRDOSS_E8004;
-    if (retsz || cacheP)
+    if (retsz || (isW && cacheP))
        {struct stat buf;
         int retc;
         do {retc = fstat(fd, &buf);} while(retc && errno == EINTR);
@@ -826,7 +827,7 @@ int XrdOssFile::Close(long long *retsz)
 #ifdef XRDOSSCX
     if (cxobj) {delete cxobj; cxobj = 0;}
 #endif
-    fd = -1; FSize = -1; cacheP = 0;
+    fd = -1; FSize = -1; cacheP = 0; isW = false;
     return XrdOssOK;
 }
 

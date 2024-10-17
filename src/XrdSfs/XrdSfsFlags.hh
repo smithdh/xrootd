@@ -75,6 +75,9 @@ static const uint64_t hasCACH = 0x0000000000000400LL;
 
 //! Feature: Supports no async I/O
 static const uint64_t hasNAIO = 0x0000000000000800LL;
+
+//! Feature: Supports fctl to set samefs and dup
+static const uint64_t hasCDUP = 0x0000000000001000LL;
 }
 
 //-----------------------------------------------------------------------------

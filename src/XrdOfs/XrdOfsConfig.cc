@@ -271,6 +271,7 @@ int XrdOfs::Configure(XrdSysError &Eroute, XrdOucEnv *EnvInfo) {
             if (ossFeatures & XRDOSS_HASNOSF)  FeatureSet |= XrdSfs::hasNOSF;
             if (ossFeatures & XRDOSS_HASCACH)  FeatureSet |= XrdSfs::hasCACH;
             if (ossFeatures & XRDOSS_HASNAIO)  FeatureSet |= XrdSfs::hasNAIO;
+            if (ossFeatures & XRDOSS_HASCDUP)  FeatureSet |= XrdSfs::hasCDUP;
             if (xrdEnv) xrdEnv->PutPtr("XrdOss*", XrdOfsOss);
             ofsConfig->Plugin(Cks);
             CksPfn = !ofsConfig->OssCks();

@@ -479,7 +479,9 @@ struct ClientOpenRequest {
    kXR_unt16 requestid;
    kXR_unt16 mode;
    kXR_unt16 options;
-   kXR_char  reserved[12];
+   kXR_unt16 optiont;
+   kXR_char  reserved[6];
+   kXR_char  fhtemplt[4];
    kXR_int32  dlen;
 };
 

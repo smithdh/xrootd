@@ -200,6 +200,9 @@ XrdOucChkPnt  *myCKP;
 int            dorawio;
 char           viaDel;
 bool           ckpBad;
+XrdOfsFile    *templateFp;
+bool           sameFs;
+bool           dupFile;
 
 private:
 

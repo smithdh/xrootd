@@ -144,6 +144,10 @@ int XrdOssSys::Create(const char *tident, const char *path, mode_t access_mode,
             }
    if (retc && retc != ENOENT) return -retc;
 
+// Discover if we have a file template
+//
+   XrdOssDF *templOssDf = env.GetPtr("xrd.templossdf*");
+
 // At this point, creation requests may need to be routed via the stagecmd.
 // This is done if the file/link do not exist. Otherwise, we drop through.
 //
@@ -201,11 +205,15 @@ int XrdOssSys::Create(const char *tident, const char *path, mode_t access_mode,
                      }
       }
 
-// Created file in the extended cache or the local name space
-//
-   if (XrdOssCache::fsfirst && !(crInfo.pOpts & XRDEXP_INPLACE))
-           retc = Alloc_Cache(crInfo, env);
-      else retc = Alloc_Local(crInfo, env);
+ // Created file in the extended cache or the local name space
+ //
+    if (templOssDf)
+       {if (templOssDf->cacheP)
+             retc = Alloc_Cache(crInfo, templOssDf);
+        else retc = Alloc_Local(crInfo, env);
+       } else if (XrdOssCache::fsfirst && !(crInfo.pOpts & XRDEXP_INPLACE))
+            retc = Alloc_Cache(crInfo, env);
+       else retc = Alloc_Local(crInfo, env);
 
 // If successful then check if xattrs were actually set
 //
@@ -225,6 +233,72 @@ int XrdOssSys::Create(const char *tident, const char *path, mode_t access_mode,
 /******************************************************************************/
 /*                           A l l o c _ C a c h e                            */
 /******************************************************************************/
+
+int XrdOssSys::Alloc_Cache(XrdOssCreateInfo &crInfo, XrdOssDF *templOssDf)
+{
+   EPNAME("Alloc_Cache");
+   int datfd, rc;
+   char pbuff[MAXPATHLEN+1],*tmp;
+   XrdOssCache::allocInfo aInfo(crInfo.Path, pbuff, sizeof(pbuff));
+   XrdOssCache_FS *cacheP = templOssDf->cacheP;
+   bool dupFile = env.GetInt("xrd.dupfile");
+    off_t Size = 0;
+
+// Grab the suggested size,
+//   which is that of the template file if duplicating,
+//   otherwise take the suggested size from the environment
+//
+    if (!dupFile)
+       {long long cgSize;
+        if ((tmp = env.Get(OSS_ASIZE))
+        &&  XrdOuca2x::a2sz(OssEroute,"invalid asize",tmp,&cgSize,0))
+           return -XRDOSS_E8018;
+        Size = cgSize;
+       } else {struct stat sbuf;
+               if ((rc = templOssDf->Fstat(&sbuf))<0)
+                  return rc;
+               Size = sbuf.st_size;
+              }
+
+// Set the input for the allocation decision to match the supplied fs
+//
+   aInfo.cgPath = cacheP->path
+   aInfo.cgPlen = cacheP->plen;
+   aInfo.cgSize = Size;
+   aInfo.cgName = cacheP->group;
+   aInfo.aMode  = crInfo.Amode;
+
+   if ((datfd = XrdOssCache::Alloc(aInfo)) < 0) return datfd;
+
+// If requested duplicate template file
+//
+   if (dupFile && ioctl(datfd, FICLONE, templOssDf->getFD())<0)
+      {rc = -errno; unlink(pbuff);
+       close(datfd); return rf;}
+
+// Set the pfn as the extended attribute if we are in new mode
+//
+   if (!(crInfo.pOpts & XRDEXP_NOXATTR)
+   &&  (rc = XrdSysFAttr::Xat->Set(XrdFrcXAttrPfn::Name(), crInfo.Path,
+                                   strlen(crInfo.Path)+1, pbuff, datfd)))
+      {close(datfd); return rc;}
+
+// Set extended attributes for this newly created file if allowed to do so.
+// SetFattr() alaways closes the provided file descriptor!
+//
+   if ((rc = SetFattr(crInfo, datfd, 1))) return rc;
+
+// Now create a symbolic link to the target
+//
+   if ((symlink(pbuff, crInfo.Path) && errno != EEXIST)
+   ||  unlink(crInfo.Path) || symlink(pbuff, crInfo.Path))
+      {rc = -errno; unlink(pbuff);}
+
+// All done
+//
+   DEBUG(aInfo.cgName <<" cache for " <<pbuff);
+   return rc;
+}
 
 int XrdOssSys::Alloc_Cache(XrdOssCreateInfo &crInfo, XrdOucEnv &env)
 {
@@ -290,12 +364,19 @@ int XrdOssSys::Alloc_Cache(XrdOssCreateInfo &crInfo, XrdOucEnv &env)
 int XrdOssSys::Alloc_Local(XrdOssCreateInfo &crInfo, XrdOucEnv &env)
 {
    int datfd, rc;
+   bool dupFile = env.GetInt("xrd.dupfile");
+   XrdOssDF *templOssDf = env.GetPtr("xrd.templossdf*");
 
 // Simply open the file in the local filesystem, creating it if need be.
 //
    do {datfd = open(crInfo.Path, O_RDWR|O_CREAT|O_TRUNC, crInfo.Amode);}
                while(datfd < 0 && errno == EINTR);
    if (datfd < 0) return -errno;
+
+   if (dupFile && ioctl(datfd, FICLONE, templOssDf->getFD())<0)
+      {rc = -errno; unlink(crInfo.Path);
+       return rc;
+      }
 
 // Set extended attributes for this newly created file if allowed to do so.
 // SetFattr() alaways closes the provided file descriptor!

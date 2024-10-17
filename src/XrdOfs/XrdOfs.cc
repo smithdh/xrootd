@@ -439,7 +439,8 @@ int XrdOfsDirectory::autoStat(struct stat *buf)
 XrdOfsFile::XrdOfsFile(XrdOucErrInfo &eInfo, const char *user)
                       : XrdSfsFile(eInfo), tident(user ? user : ""),
                         oh(XrdOfs::dummyHandle), myTPC(0), myCKP(0),
-                        dorawio(0), viaDel(0), ckpBad(false) {}
+                        dorawio(0), viaDel(0), ckpBad(false), templateFp(0),
+                        sameFs(false), dupFile(false) {}
 
 /******************************************************************************/
 /*                                  o p e n                                   */
@@ -578,6 +579,13 @@ int XrdOfsFile::open(const char          *path,      // In
 //
    if (tpcKey && (open_mode & SFS_O_NOTPC))
       return XrdOfsFS->Emsg(epname, error, EPROTOTYPE, "tpc", path);
+
+    if(FeatureSet & XrdSfs::hasCDUP)
+       {Open_Env.PutInt("xrd.samefs", (sameFs && templateFp) ? "1" : "0");
+        Open_Env.PutInt("xrd.dupfile", (dupFile && templateFp) ? "1" : "0");
+        Open_Env.PutPtr("xrd.templossdf*",
+           templateFp ? templateFp->oh.Select() : nullptr);
+       }
 
 // Create the file if so requested o/w try to attach the file
 //
@@ -737,6 +745,12 @@ int XrdOfsFile::open(const char          *path,      // In
           XrdOfsFS->Balancer->Removed(path);
        return XrdOfsFS->Emsg(epname, error, retc, "open", path);
       }
+
+// If we were requested to use a particular fs or make a duplicated file we
+// should have created it, instead the file already existed
+//
+   if ((sameFs || dupFile) && !(open_mode & crMask))
+      return XrdOfsFS->Emsg(epname, error, EEXIST, "open", path);
 
 // Verify that we can actually use this file
 //
@@ -1046,6 +1060,28 @@ int XrdOfsFile::fctl(const int cmd, int alen, const char *args,
 {                             // 12345678901234
    static const char *fctlArg = "ofs.tpc cancel";
    static const int   fctlAsz = 15;
+
+   if (cmd == SFS_FCTL_SAMEFS && alen == sizeof(XrdSfsFile*))
+      {if(!(FeatureSet & XrdSfs::hasCDUP))
+          {error.setErrInfo(ENOTSUP, "requiring samefs not supported");
+           return SFS_ERROR;
+          }
+       XrdSfsFile *sfsfp = reinterpret_cast<XrdSfsFile*>(args);
+       templateFp = dynamic_cast<XrdOfsFile*>(sfsfp);
+       sameFs = true;
+       return SFS_OK;
+      }
+
+   if (cmd == SFS_FCTL_CDUP && alen == sizeof(XrdSfsFile*))
+      {if(!(FeatureSet & XrdSfs::hasCDUP))
+          {error.setErrInfo(ENOTSUP, "file duplication not supported");
+           return SFS_ERROR;
+          }
+       XrdSfsFile *sfsfp = reinterpret_cast<XrdSfsFile*>(args);
+       templateFp = dynamic_cast<XrdOfsFile*>(sfsfp);
+       dupFile = true;
+       return SFS_OK;
+      }
 
 // See if the is a tpc cancellation (the only thing we support here)
 //

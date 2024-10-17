@@ -117,7 +117,7 @@ int     Write(XrdSfsAio *aiop);
         XrdOssFile(const char *tid, int fdnum=-1)
                   : XrdOssDF(tid, DF_isFile, fdnum),
                     cxobj(0), cacheP(0), mmFile(0),
-                    rawio(0), cxpgsz(0) {cxid[0] = '\0';}
+                    rawio(0), cxpgsz(0), isW(false) {cxid[0] = '\0';}
 
 virtual ~XrdOssFile() {if (fd >= 0) Close();}
 
@@ -132,6 +132,7 @@ long long       FSize;
 int             rawio;
 int             cxpgsz;
 char            cxid[4];
+bool            isW;
 };
 
 /******************************************************************************/
@@ -163,7 +164,7 @@ int       Configure(const char *, XrdSysError &, XrdOucEnv *envP);
 void      Config_Display(XrdSysError &);
 virtual
 int       Create(const char *, const char *, mode_t, XrdOucEnv &, int opts=0);
-uint64_t  Features() {return XRDOSS_HASNAIO;} // Turn async I/O off for disk
+uint64_t  Features() {return XRDOSS_HASNAIO|XRDOSS_HASCDUP;} // Turn async I/O off for disk
 int       GenLocalPath(const char *, char *);
 int       GenRemotePath(const char *, char *);
 int       Init(XrdSysLogger *, const char *, XrdOucEnv *envP);
@@ -314,6 +315,7 @@ short           USync;        // Usage sync interval
 bool            pfcMode;      // Setup for Proxy File Cache
 
 int                Alloc_Cache(XrdOssCreateInfo &, XrdOucEnv &);
+int                Alloc_Cache(XrdOssCreateInfo &, XrdOssDF *, bool);
 int                Alloc_Local(XrdOssCreateInfo &, XrdOucEnv &);
 int                BreakLink(const char *local_path, struct stat &statbuff);
 int                CalcTime();

@@ -1359,7 +1359,7 @@ int XrdXrootdProtocol::do_Open()
 {
    static XrdXrootdCallBack openCB("open file", XROOTD_MON_OPENR);
    int fhandle;
-   int rc, mode, opts, openopts, compchk = 0;
+   int rc, mode, opts, optt, openopts, compchk = 0;
    int popt, retStat = 0;
    char *opaque, usage, ebuff[2048], opC;
    bool doDig, doforce = false, isAsync = false;
@@ -1379,6 +1379,7 @@ int XrdXrootdProtocol::do_Open()
 //
    mode = (int)ntohs(Request.open.mode);
    opts = (int)ntohs(Request.open.options);
+   optt = (int)ntohs(Request.open.optiont);
 
 // Map the mode and options
 //
@@ -1451,6 +1452,16 @@ int XrdXrootdProtocol::do_Open()
 //
    if (popt & XROOTDXP_NOMWCHK) openopts |= SFS_O_MULTIW;
 
+// If we'll need to use the template handle check it is valid
+//
+   XrdXrootdFile *fptmplt = nullptr;
+   if ((optt & kXR_dup) || (optt & kXR_samefs))
+      {XrdXrootdFHandle fh(Request.open.fhtemplt);
+       if (!FTab || !(fptmplt = FTab->Get(fh.handle)))
+          return Response.Send(kXR_FileNotOpen,
+                          "template filehandle does not refer to an open file");
+      }
+
 // Construct an open helper to release resources should we exit due to an error.
 //
    OpenHelper oHelp(Locker, fn);
@@ -1490,6 +1501,21 @@ int XrdXrootdProtocol::do_Open()
 //
    fp->error.setErrCB(&openCB, ReqID.getID());
    fp->error.setUCap(clientPV);
+
+// Notify the file if samefs or duplicate-at-open have been requested
+//
+    if (optt & kXR_samefs)
+       {rc = fp->fctl(SFS_FCTL_SAMEFS,
+                 sizeof(XrdSfsFile*), static_cast<char*>(fptmplt->XrdSfsp), CRED);
+        if (SFS_OK != rc)
+           return fsError(rc, XROOTD_MON_OPENR, fp->error, 0, 0);
+       }
+    if (optt & kXR_dup)
+       {rc = fp->fctl(SFS_FCTL_CDUP,
+                 sizeof(XrdSfsFile*), static_cast<char*>(fptmplt->XrdSfsp), CRED);
+        if (SFS_OK != rc)
+           return fsError(rc, XROOTD_MON_OPENR, fp->error, 0, 0);
+       }
 
 // If TPC opens require TLS but this is not a TLS connection, prohibit TPC
 //

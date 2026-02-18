@@ -1362,6 +1362,7 @@ int XrdConfig::Setup(char *dfltp, char *libProt)
 // any protocol in case one of them starts using the default network.
 //
    XrdInet *arbNet = 0, *theNet;
+   bool netSet = false;
    while((cp = Firstcp))
          {for (int i = 0; i < cp->numP; i++)
              {if (cp->portVec[i] < 0) continue;
@@ -1370,7 +1371,10 @@ int XrdConfig::Setup(char *dfltp, char *libProt)
                        if (!theNet) return 1;
                        if (!(cp->portVec[i])) arbNet = theNet;
                       }
-              if (i == 0) XrdNetTCP = theNet; // Avoid race condition!!!
+              if (i == 0 && !netSet)
+                 {XrdNetTCP = theNet; // Avoid race condition!!!
+                  netSet = true;
+                 }
               ProtInfo.Port   = theNet->Port();
               ProtInfo.NetTCP = theNet;
               ProtInfo.WSize  = theNet->WSize();

@@ -184,7 +184,6 @@ void* XrdPosixFile::DelayedDestroy(void* vpf)
 //
    EPNAME("DDestroy");
 
-   XrdSysError *Say = XrdPosixGlobals::eDest;
    XrdCl::XRootDStatus Status;
    std::string statusMsg;
    const char *eTxt;
@@ -204,6 +203,8 @@ do{if (doWait)
        doWait = true;
        continue;
       }
+
+   XrdSysError *Say = XrdPosixGlobals::eDest;
 
 // Grab the delayed delete list
 //

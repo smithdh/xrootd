@@ -33,6 +33,7 @@
 #include <sys/types.h>
 
 #include "XrdSys/XrdSysPthread.hh"
+#include "XrdSys/XrdSysRAtomic.hh"
 #include "Xrd/XrdJob.hh"
 
 class XrdOucTrace;
@@ -78,11 +79,11 @@ void          setNproc(const bool limlower);
 
 // Statistical information
 //
-int        num_TCreate; // Number of threads created
-int        num_TDestroy;// Number of threads destroyed
-int        num_Jobs;    // Number of jobs scheduled
-int        max_QLength; // Longest queue length we had
-int        num_Limited; // Number of times max was reached
+RAtomic_int   num_TCreate; // Number of threads created
+RAtomic_int   num_TDestroy;// Number of threads destroyed
+RAtomic_int   num_Jobs;    // Number of jobs scheduled
+RAtomic_int   max_QLength; // Longest queue length we had
+RAtomic_int   num_Limited; // Number of times max was reached
 
 // This is the preferred constructor
 //
@@ -108,14 +109,14 @@ XrdSysTrace *XrdTrace;
 XrdOucTrace *XrdTraceOld;  // This is only used for ABI compatibility
 
 XrdSysMutex DispatchMutex; // Disp: Protects above area
-int        idl_Workers;    // Disp: Number of idle workers
+RAtomic_int idl_Workers;    // Disp: Number of idle workers
 
 int        min_Workers;   // Sched: Min threads we need to have
 int        max_Workers;   // Sched: Max threads we can start
 int        max_Workidl;   // Sched: Max idle time for threads above min_Workers
-int        num_Workers;   // Sched: Number of threads we have
-int        stk_Workers;   // Sched: Number of sticky workers we can have
-int        num_JobsinQ;   // Sched: Number of outstanding jobs in the queue
+RAtomic_int num_Workers;   // Sched: Number of threads we have
+RAtomic_int stk_Workers;   // Sched: Number of sticky workers we can have
+RAtomic_int num_JobsinQ;   // Sched: Number of outstanding jobs in the queue
 int        num_Layoffs;   // Sched: Number of threads to terminate
 
 XrdJob                *WorkFirst;  // Pending work

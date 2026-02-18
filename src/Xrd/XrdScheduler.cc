@@ -392,7 +392,7 @@ void XrdScheduler::Schedule(XrdJob *jp)
 //
    num_Jobs++;
    num_JobsinQ++;
-   if (num_JobsinQ > max_QLength) max_QLength = num_JobsinQ;
+   if (num_JobsinQ > max_QLength) max_QLength = num_JobsinQ.load();
 
 // Unlock the data area and return
 //
@@ -423,7 +423,7 @@ void XrdScheduler::Schedule(int numjobs, XrdJob *jfirst, XrdJob *jlast)
 //
    num_Jobs    += numjobs;
    num_JobsinQ += numjobs;
-   if (num_JobsinQ > max_QLength) max_QLength = num_JobsinQ;
+   if (num_JobsinQ > max_QLength) max_QLength = num_JobsinQ.load();
 
 // Indicate number of jobs to work on
 //

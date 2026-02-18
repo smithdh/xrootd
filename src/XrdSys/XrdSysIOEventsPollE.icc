@@ -412,11 +412,11 @@ bool XrdSys::IOEvents::PollE::Process(int curr)
 
 void XrdSys::IOEvents::PollE::Shutdown()
 {
-   static XrdSysMutex shutMutex;
+   static XrdSysMutex *shutMutex = new XrdSysMutex;
 
 // To avoid race conditions, we serialize this code
 //
-   shutMutex.Lock();
+   shutMutex->Lock();
 
 // Release the poll table
 //
@@ -428,5 +428,5 @@ void XrdSys::IOEvents::PollE::Shutdown()
 
 // All done
 //
-   shutMutex.UnLock();
+   shutMutex->UnLock();
 }

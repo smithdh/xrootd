@@ -337,7 +337,7 @@ Poller        *chPoller;    // The effective poller
 Poller        *chPollXQ;    // The real      poller
 CallBack      *chCB;        // CallBack function
 void          *chCBA;       // CallBack argument
-int            chFD;        // Associated file descriptor
+CPP_ATOMIC_TYPE(int)            chFD;        // Associated file descriptor
 int            pollEnt;     // Used only for poll() type pollers
 int            chRTO;       // Read  timeout value (0 means none)
 int            chWTO;       // Write timeout value (0 means none)

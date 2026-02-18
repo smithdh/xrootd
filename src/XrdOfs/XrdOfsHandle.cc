@@ -312,6 +312,8 @@ int XrdOfsHandle::Alloc(XrdOfsHandle **Handle)
   
 int XrdOfsHandle::Alloc(XrdOfsHanKey theKey, int Opts, XrdOfsHandle **Handle)
 {
+// We're called with myMutex locked
+//
    static const int minAlloc = 4096/sizeof(XrdOfsHandle);
    XrdOfsHandle *hP;
 
@@ -332,8 +334,10 @@ int XrdOfsHandle::Alloc(XrdOfsHanKey theKey, int Opts, XrdOfsHandle **Handle)
        hP->isRW         = (Opts & opPC);           // File mode
        hP->ssi          = ossDF;                   // No storage system yet
        hP->Posc         = 0;                       // No creator
+       myMutex.UnLock();                           // avoid lock inversion
        hP->Lock();                                 // Wait is not possible
        *Handle = hP;
+       myMutex.Lock();
        return 0;
       }
    return nomemDelay;                              // Delay client

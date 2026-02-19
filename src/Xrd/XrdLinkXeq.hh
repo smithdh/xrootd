@@ -32,6 +32,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <ctime>
+#include <atomic>
 
 #include "Xrd/XrdLink.hh"
 #include "Xrd/XrdLinkInfo.hh"
@@ -201,7 +202,7 @@ XrdSendQ           *sendQ;          // Protected by wrMutex && opMutex
 int                 HNlen;
 bool                LockReads;
 bool                KeepFD;
-char                isIdle;
+std::atomic<char>                isIdle;
 char                Uname[24];       // Uname and Lname must be adjacent!
 char                Lname[256];
 };

@@ -158,11 +158,12 @@ SMask_t XrdCmsPList_Anchor::Insert(const char *pname, XrdCmsPInfo *pinfo)
 void XrdCmsPList_Anchor::Remove(SMask_t mask)
 {
     SMask_t zmask(~mask);
-    XrdCmsPList *pp = next, *prevp = 0;
 
 // Lock the list
 //
    Lock();
+
+   XrdCmsPList *pp = next, *prevp = 0;
 
 // Remove bit from mask. If mask is zero, remove the entry
 //

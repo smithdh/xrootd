@@ -62,7 +62,7 @@ public:
        char   hasNet    = 0; //0 Network selection mask
        char   isBad     = 0; //1 Set on an event that makes it unselectable
        char   isOffline;     //2 Set when a link failure occurs (constructor)
-       char   isRW      = 0; //3 Set when node can write or stage data
+       RAtomic_char   isRW      = 0; //3 Set when node can write or stage data
        char   isNoStage = 0; //4 Set upon a nostage event
        char   isMan     = 0; //5 Set when node acts as manager
        char   isPeer    = 0; //6 Set when node acts as peer manager
@@ -84,10 +84,10 @@ static const char isDoomed   = 0x08; // in isBad -> Node socket must be closed
 static const char allowsRW   = 0x01; // in isRW  -> Server allows r/w access
 static const char allowsSS   = 0x02; // in isRW  -> Server can stage data
 
-unsigned int    DiskTotal = 0;// Total disk space in GB
+RAtomic_uint    DiskTotal = 0;// Total disk space in GB
          int    DiskNums  = 0;// Number of file systems
          int    DiskMinF  = 0;// Minimum MB needed for selection
-         int    DiskFree  = 0;// Largest free MB
+ RAtomic_int    DiskFree  = 0;// Largest free MB
          int    DiskUtil  = 0;// Total disk utilization
 unsigned int    ConfigID  = 0;// Configuration identifier
 

@@ -30,6 +30,8 @@
 /* specific prior written permission of the institution or contributor.       */
 /******************************************************************************/
 
+#include <atomic>
+
 #include "XrdCms/XrdCmsPerfMon.hh"
 #include "XrdSys/XrdSysError.hh"
 #include "XrdSys/XrdSysPthread.hh"
@@ -109,7 +111,7 @@ long          HWMShow;  // Calculated only once
 char          MinStype; // Calculated only once
 char          HWMStype; // Calculated only once
 char          Virtual;  // This is a virtual filesystem
-char          VirtUpdt; // Data changed for the virtul FS
+std::atomic<char>          VirtUpdt; // Data changed for the virtul FS
 
 time_t        rep_tod;
 char         *monpgm;

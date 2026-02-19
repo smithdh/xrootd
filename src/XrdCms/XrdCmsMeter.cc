@@ -164,8 +164,11 @@ int XrdCmsMeter::FreeSpace(int &tot_util)
    if (Virtual)
       {if (Virtual == peerFS) {tot_util = 0; return 0x7fffffff;}
        if (VirtUpdt) UpdtSpace();
+       cfsMutex.Lock();
        tot_util = lastUtil;
-       return lastFree;
+       const int lf = lastFree;
+       cfsMutex.UnLock();
+       return lf;
       }
 
 // The values are calculated periodically so use the last available ones

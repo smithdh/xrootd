@@ -163,9 +163,16 @@ int XrdCmsMeter::FreeSpace(int &tot_util)
 //
    if (Virtual)
       {if (Virtual == peerFS) {tot_util = 0; return 0x7fffffff;}
-       if (VirtUpdt) UpdtSpace();
+       cfsMutex.Lock();
+       if (VirtUpdt)
+          {cfsMutex.UnLock();
+           UpdtSpace();
+           cfsMutex.Lock();
+          }
        tot_util = lastUtil;
-       return lastFree;
+       const int lf = lastFree;
+       cfsMutex.UnLock();
+       return lf;
       }
 
 // The values are calculated periodically so use the last available ones
@@ -468,20 +475,22 @@ void *XrdCmsMeter::RunPM()
 unsigned int XrdCmsMeter::TotalSpace(unsigned int &minfree)
 {
    long long fstotal, fsminfr;
+   XrdSysMutexHelper lck;
 
 // If we are a virtual filesystem, do virtual stats
 //
    if (Virtual)
       {if (Virtual == peerFS) {minfree = 0; return 0x7fffffff;}
-       if (VirtUpdt) UpdtSpace();
+       lck.Lock(&cfsMutex);
+       if (VirtUpdt) { lck.UnLock(); UpdtSpace(); }
       }
 
 // The values are calculated periodically so use the last available ones
 //
-   cfsMutex.Lock();
+   lck.Lock(&cfsMutex);
    fstotal = dsk_tot;
    fsminfr = MinFree;
-   cfsMutex.UnLock();
+   lck.UnLock();
 
 // Now adjust the values to fit
 //

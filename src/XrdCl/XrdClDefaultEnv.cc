@@ -732,12 +732,14 @@ namespace XrdCl
   //----------------------------------------------------------------------------
   void DefaultEnv::Finalize()
   {
-    if( sPostMaster )
+    PostMaster* postMaster = AtomicGet( sPostMaster );
+
+    if( postMaster && AtomicCAS( sPostMaster, postMaster, nullptr ) )
     {
-      sPostMaster->Stop();
-      sPostMaster->Finalize();
-      delete sPostMaster;
-      sPostMaster = 0;
+      postMaster->Stop();
+      postMaster->Finalize();
+      delete postMaster;
+      postMaster = 0;
     }
 
     delete sTransportManager;

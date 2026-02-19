@@ -475,15 +475,16 @@ bool
 CurlOperation::TransferStalled(uint64_t xfer, const std::chrono::steady_clock::time_point &now)
 {
     // First, check to see how long it's been since any data was sent.
-    if (m_last_xfer == std::chrono::steady_clock::time_point()) {
-        m_last_xfer = m_header_lastop;
+    if (m_last_xfer == 0) {
+        m_last_xfer = m_header_lastop.time_since_epoch().count();
     }
-    auto elapsed = now - m_last_xfer;
+    auto elapsed = now - std::chrono::steady_clock::time_point{
+                           std::chrono::steady_clock::duration{m_last_xfer}};
     uint64_t xfer_diff = 0;
     if (xfer > m_last_xfer_count) {
         xfer_diff = xfer - m_last_xfer_count;
         m_last_xfer_count = xfer;
-        m_last_xfer = now;
+        m_last_xfer = now.time_since_epoch().count();
     }
     if (elapsed > m_stall_interval) {
         if (m_error == OpError::ErrNone) m_error = IsPaused() ? OpError::ErrTransferClientStall : OpError::ErrTransferStall;

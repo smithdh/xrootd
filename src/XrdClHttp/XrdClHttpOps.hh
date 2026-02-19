@@ -111,10 +111,11 @@ public:
 
     // Returns when the curl operation expires
     std::chrono::steady_clock::time_point GetOperationExpiry() {
-        if (m_last_xfer == std::chrono::steady_clock::time_point()) {
+        if (m_last_xfer == 0) {
             return GetHeaderExpiry();
         }
-        return m_last_xfer + m_stall_interval;
+        return std::chrono::steady_clock::time_point{
+                 std::chrono::steady_clock::duration{m_last_xfer}} + m_stall_interval;
     }
 
     // Clean up the thread-local DNS cache for fake lookups associated with the
@@ -356,7 +357,7 @@ private:
     std::chrono::steady_clock::time_point m_header_lastop;
 
     // The last time data was transferred.
-    std::chrono::steady_clock::time_point m_last_xfer;
+    std::atomic<std::chrono::steady_clock::rep> m_last_xfer{0};
 
     // The last recorded number of bytes that had been transferred.
     uint64_t m_last_xfer_count{0};

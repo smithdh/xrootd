@@ -465,10 +465,10 @@ bool
 CurlOperation::TransferStalled(uint64_t xfer, const std::chrono::steady_clock::time_point &now)
 {
     // First, check to see how long it's been since any data was sent.
-    if (m_last_xfer == std::chrono::steady_clock::time_point()) {
+    if (m_last_xfer.load() == std::chrono::steady_clock::time_point()) {
         m_last_xfer = m_header_lastop;
     }
-    auto elapsed = now - m_last_xfer;
+    auto elapsed = now - m_last_xfer.load();
     uint64_t xfer_diff = 0;
     if (xfer > m_last_xfer_count) {
         xfer_diff = xfer - m_last_xfer_count;

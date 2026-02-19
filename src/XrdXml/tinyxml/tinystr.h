@@ -204,7 +204,7 @@ class TiXmlString
   private:
 
 	void init(size_type sz) { init(sz, sz); }
-	void set_size(size_type sz) { rep_->str[ rep_->size = sz ] = '\0'; }
+	void set_size(size_type sz) { if (rep_ != &nullrep_) rep_->str[ rep_->size = sz ] = '\0'; }
 	char* start() const { return rep_->str; }
 	char* finish() const { return rep_->str + rep_->size; }
 

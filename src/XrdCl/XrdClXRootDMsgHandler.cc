@@ -120,8 +120,6 @@ namespace XrdCl
                  "that it was sent, assuming it was sent ok.",
                  pUrl.GetHostId().c_str(),
                  pRequest->GetObfuscatedDescription().c_str() );
-
-      pMsgInFly = true;
     }
 
     //--------------------------------------------------------------------------
@@ -461,7 +459,7 @@ namespace XrdCl
     //--------------------------------------------------------------------------
     // we have an response for the message so it's not in fly anymore
     //--------------------------------------------------------------------------
-    pMsgInFly = false;
+    pSendingState.fetch_or( kInFlyDone );
 
     //--------------------------------------------------------------------------
     // Reset the aggregated wait (used to omit wait response in case of Metalink
@@ -923,6 +921,9 @@ namespace XrdCl
   {
     Log *log = DefaultEnv::GetLog();
 
+    const std::string hostid = pUrl.GetHostId();
+    const std::string descr = message->GetObfuscatedDescription();
+
     const int sst = pSendingState.fetch_or( kSendDone );
 
     // ignore if we're already in this state
@@ -933,8 +934,7 @@ namespace XrdCl
     if( !status.IsOK() && ( ( sst & kFinalResp ) || ( sst & kSawResp ) ) )
     {
       log->Error( XRootDMsg, "[%s] Unexpected error for message %s. Trying to "
-                  "recover.", pUrl.GetHostId().c_str(),
-                  message->GetObfuscatedDescription().c_str() );
+                  "recover.", hostid.c_str(), descr.c_str() );
       HandleError( status );
       return;
     }
@@ -943,7 +943,7 @@ namespace XrdCl
     {
       log->Dump( XRootDMsg, "[%s] Got late notification that outgoing message %s was "
                  "sent, already have final response, queuing handler callback.",
-                 pUrl.GetHostId().c_str(), message->GetObfuscatedDescription().c_str() );
+                 hostid.c_str(), descr.c_str() );
       HandleRspOrQueue();
       return;
     }
@@ -952,7 +952,7 @@ namespace XrdCl
     {
       log->Dump( XRootDMsg, "[%s] Got late notification that outgoing message %s was "
                  "sent, already want to retry at different server.",
-                 pUrl.GetHostId().c_str(), message->GetObfuscatedDescription().c_str() );
+                 hostid.c_str(), descr.c_str() );
        HandleError( RetryAtServer( pRetryAtUrl, pRetryAtEntryType ) );
        return;
     }
@@ -961,19 +961,18 @@ namespace XrdCl
     {
       log->Dump( XRootDMsg, "[%s] Got late notification that message %s has "
                  "been successfully sent.",
-                 pUrl.GetHostId().c_str(), message->GetObfuscatedDescription().c_str() );
+                 hostid.c_str(), descr.c_str() );
       return;
     }
 
     //--------------------------------------------------------------------------
     // We were successful, so we now need to listen for a response
+    // The processing could now be happening concurrently
     //--------------------------------------------------------------------------
     if( status.IsOK() )
     {
       log->Dump( XRootDMsg, "[%s] Message %s has been successfully sent.",
-                 pUrl.GetHostId().c_str(), message->GetObfuscatedDescription().c_str() );
-
-      pMsgInFly = true;
+                 hostid.c_str(), descr.c_str() );
       return;
     }
 
@@ -981,8 +980,7 @@ namespace XrdCl
     // We have failed, recover if possible
     //--------------------------------------------------------------------------
     log->Error( XRootDMsg, "[%s] Impossible to send message %s. Trying to "
-                "recover.", pUrl.GetHostId().c_str(),
-                message->GetObfuscatedDescription().c_str() );
+                "recover.", hostid.c_str(), descr.c_str() );
     HandleError( status );
   }
 
@@ -1231,7 +1229,7 @@ namespace XrdCl
     if( pSidMgr && finalrsp )
     {
       ClientRequest *req = (ClientRequest *)pRequest->GetBuffer();
-      if( status->IsOK() || !pMsgInFly ||
+      if( status->IsOK() || !IsInFly() ||
           !( status->code == errOperationExpired || status->code == errOperationInterrupted ) )
         pSidMgr->ReleaseSID( req->header.streamid );
     }
@@ -2042,7 +2040,7 @@ namespace XrdCl
     if( status.IsOK() )
       return;
 
-    if( pSidMgr && pMsgInFly && ( 
+    if( pSidMgr && IsInFly() && ( 
         status.code == errOperationExpired ||
         status.code == errOperationInterrupted ) )
     {

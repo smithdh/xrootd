@@ -40,6 +40,7 @@
 
 #include "XrdNet/XrdNetAddr.hh"
 
+#include "XrdSys/XrdSysRAtomic.hh"
 #include "XrdTls/XrdTls.hh"
 #include "XrdTls/XrdTlsSocket.hh"
   
@@ -201,7 +202,7 @@ XrdSendQ           *sendQ;          // Protected by wrMutex && opMutex
 int                 HNlen;
 bool                LockReads;
 bool                KeepFD;
-char                isIdle;
+RAtomic_char        isIdle;
 char                Uname[24];       // Uname and Lname must be adjacent!
 char                Lname[256];
 };

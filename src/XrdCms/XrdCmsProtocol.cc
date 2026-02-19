@@ -790,9 +790,15 @@ XrdCmsRouting *XrdCmsProtocol::Admit()
 // node that may have files the we already reported on. Note that setting
 // isBad may be subject to a concurrency race, but that is still OK here.
 //
+   myNode->Ref();
+   myNode->UnLock();
    Cluster.ResetRef(servset);
    if (Config.asManager()) {Manager->Reset(); myNode->SyncSpace();}
    myNode->isBad &= ~XrdCmsNode::isDisabled;
+   Cluster.SLock(true);
+   myNode->Lock();
+   myNode->unRef();
+   Cluster.SLock(false);
 
 // At this point we can switch to nonblocking sendq for this node
 //

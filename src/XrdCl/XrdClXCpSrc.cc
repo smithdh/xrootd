@@ -132,6 +132,7 @@ int XCpSrc::Start()
 
 void* XCpSrc::Run( void* arg )
 {
+  pthread_detach(pthread_self());
   XCpSrc *me = static_cast<XCpSrc*>( arg );
   me->StartDownloading();
   me->Delete();

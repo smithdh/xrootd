@@ -364,7 +364,7 @@ class XCpSrc
      * The total time we were transferring data, before
      * the restart
      */
-    time_t                        pTransferTime;
+    std::atomic<time_t>           pTransferTime;
 
     /**
      * The total time we were transferring data, before

@@ -81,6 +81,7 @@ namespace XrdCl
 #else
   const int DefaultNoDelay                 = 1;
 #endif
+  const int DefaultAioLocal                = 1;
   const int DefaultAioSignal               = 0;
   const int DefaultPreferIPv4              = 0;
   const int DefaultMaxMetalinkWait         = 60;

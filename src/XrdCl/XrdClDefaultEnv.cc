@@ -306,6 +306,7 @@ namespace XrdCl
     REGISTER_VAR_INT( varsInt, "XRateThreshold",          DefaultXRateThreshold          );
     REGISTER_VAR_INT( varsInt, "CpRetry",                 DefaultCpRetry                 );
     REGISTER_VAR_INT( varsInt, "CpUsePgWrtRd",            DefaultCpUsePgWrtRd            );
+    REGISTER_VAR_INT( varsInt, "AioLocal",                DefaultAioLocal                );
 
     REGISTER_VAR_STR( varsStr, "ClientMonitor",           DefaultClientMonitor           );
     REGISTER_VAR_STR( varsStr, "ClientMonitorParam",      DefaultClientMonitorParam      );

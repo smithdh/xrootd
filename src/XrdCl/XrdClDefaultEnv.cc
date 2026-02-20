@@ -29,7 +29,6 @@
 #include "XrdCl/XrdClPlugInManager.hh"
 #include "XrdCl/XrdClOptimizers.hh"
 #include "XrdOuc/XrdOucPreload.hh"
-#include "XrdSys/XrdSysAtomics.hh"
 #include "XrdSys/XrdSysUtils.hh"
 #include "XrdSys/XrdSysPwd.hh"
 #include "XrdVersion.hh"
@@ -237,17 +236,17 @@ namespace XrdCl
   //----------------------------------------------------------------------------
   // Statics
   //----------------------------------------------------------------------------
-  XrdSysMutex        DefaultEnv::sInitMutex;
+  XrdSysMutex       *DefaultEnv::sInitMutex          = 0;
   Env               *DefaultEnv::sEnv                = 0;
-  PostMaster        *DefaultEnv::sPostMaster         = 0;
+  std::atomic<PostMaster*>       DefaultEnv::sPostMaster         = 0;
   Log               *DefaultEnv::sLog                = 0;
   ForkHandler       *DefaultEnv::sForkHandler        = 0;
   FileTimer         *DefaultEnv::sFileTimer          = 0;
   Monitor           *DefaultEnv::sMonitor            = 0;
   XrdOucPinLoader   *DefaultEnv::sMonitorLibHandle   = 0;
-  bool               DefaultEnv::sMonitorInitialized = false;
-  CheckSumManager   *DefaultEnv::sCheckSumManager    = 0;
-  TransportManager  *DefaultEnv::sTransportManager   = 0;
+  std::atomic<bool>  DefaultEnv::sMonitorInitialized = false;
+  std::atomic<CheckSumManager*>  DefaultEnv::sCheckSumManager    = 0;
+  std::atomic<TransportManager*> DefaultEnv::sTransportManager   = 0;
   PlugInManager     *DefaultEnv::sPlugInManager      = 0;
 
   //----------------------------------------------------------------------------
@@ -453,12 +452,12 @@ namespace XrdCl
   //----------------------------------------------------------------------------
   PostMaster *DefaultEnv::GetPostMaster()
   {
-    PostMaster* postMaster = AtomicGet(sPostMaster);
+    PostMaster* postMaster = sPostMaster.load();
 
     if( unlikely( !postMaster ) )
     {
       XrdSysMutexHelper scopedLock( sInitMutex );
-      postMaster = AtomicGet(sPostMaster);
+      postMaster = sPostMaster.load();
 
       if( postMaster )
         return postMaster;
@@ -482,7 +481,9 @@ namespace XrdCl
 
       sForkHandler->RegisterPostMaster( postMaster );
       postMaster->GetTaskManager()->RegisterTask( sFileTimer, time(0), false );
-      AtomicCAS(sPostMaster, sPostMaster, postMaster);
+
+      PostMaster *expected = 0;
+      sPostMaster.compare_exchange_strong( expected, postMaster );
     }
 
     return postMaster;
@@ -686,6 +687,7 @@ namespace XrdCl
   //----------------------------------------------------------------------------
   void DefaultEnv::Initialize()
   {
+    sInitMutex     = new XrdSysMutex;
     sLog           = new Log();
     SetUpLog();
 
@@ -733,14 +735,14 @@ namespace XrdCl
   //----------------------------------------------------------------------------
   void DefaultEnv::Finalize()
   {
-    PostMaster* postMaster = AtomicGet( sPostMaster );
+    PostMaster *postmaster = sPostMaster.load();
 
-    if( postMaster && AtomicCAS( sPostMaster, postMaster, nullptr ) )
+    if( postmaster )
     {
-      postMaster->Stop();
-      postMaster->Finalize();
-      delete postMaster;
-      postMaster = 0;
+      postmaster->Stop();
+      postmaster->Finalize();
+      delete postmaster;
+      sPostMaster = postmaster =  0;
     }
 
     delete sTransportManager;
@@ -758,6 +760,8 @@ namespace XrdCl
     delete sMonitorLibHandle;
     sMonitorLibHandle = 0;
 
+    sMonitorInitialized = false;
+
     delete sForkHandler;
     sForkHandler = 0;
 
@@ -772,6 +776,9 @@ namespace XrdCl
 
     delete sLog;
     sLog = 0;
+
+    delete sInitMutex;
+    sInitMutex = 0;
   }
 
   //----------------------------------------------------------------------------

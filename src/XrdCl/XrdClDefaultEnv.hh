@@ -23,6 +23,8 @@
 #include "XrdCl/XrdClEnv.hh"
 #include "XrdVersion.hh"
 
+#include <atomic>
+
 class XrdOucPinLoader;
 struct EnvInitializer;
 
@@ -173,17 +175,17 @@ namespace XrdCl
 
       static void SetUpLog();
 
-      static XrdSysMutex        sInitMutex;
+      static XrdSysMutex       *sInitMutex;
       static Env               *sEnv;
-      static PostMaster        *sPostMaster;
+      static std::atomic<PostMaster*> sPostMaster;
       static Log               *sLog;
       static ForkHandler       *sForkHandler;
       static FileTimer         *sFileTimer;
       static Monitor           *sMonitor;
       static XrdOucPinLoader   *sMonitorLibHandle;
-      static bool               sMonitorInitialized;
-      static CheckSumManager   *sCheckSumManager;
-      static TransportManager  *sTransportManager;
+      static std::atomic<bool>  sMonitorInitialized;
+      static std::atomic<CheckSumManager*> sCheckSumManager;
+      static std::atomic<TransportManager*> sTransportManager;
       static PlugInManager     *sPlugInManager;
   };
 

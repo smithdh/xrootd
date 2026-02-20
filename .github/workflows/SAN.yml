@@ -40,6 +40,7 @@ jobs:
     env:
       CC: clang
       CXX: clang++
+      XRD_AIOLOCAL: 0
 
     steps:
     - name: Install dependencies

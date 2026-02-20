@@ -358,13 +358,13 @@ class XCpSrc
     /**
      * The time when we started / restarted  chunks
      */
-    time_t                        pStartTime;
+    std::atomic<time_t>           pStartTime;
 
     /**
      * The total time we were transferring data, before
      * the restart
      */
-    time_t                        pTransferTime;
+    std::atomic<time_t>           pTransferTime;
 
     /**
      * The total time we were transferring data, before

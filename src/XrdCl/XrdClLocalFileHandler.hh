@@ -321,6 +321,8 @@ namespace XrdCl
       XRootDStatus OpenImpl( const std::string &url, uint16_t flags,
                              uint16_t mode, AnyObject *&resp );
 
+      bool UseAio();
+
       //------------------------------------------------------------------------
       //! Parses kXR_fattr request and calls respective XAttr operation
       //------------------------------------------------------------------------

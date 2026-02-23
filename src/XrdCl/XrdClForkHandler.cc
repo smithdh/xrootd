@@ -45,9 +45,11 @@ namespace XrdCl
                 pid );
 
     pMutex.Lock();
-    if( pPostMaster )
-      pPostMaster->Stop();
-    pFileTimer->Lock();
+    PostMaster *pm = pPostMaster.load();
+    FileTimer *ft = pFileTimer.load();
+    if( pm )
+      pm->Stop();
+    ft->Lock();
 
     //--------------------------------------------------------------------------
     // Lock the user-level objects
@@ -89,9 +91,11 @@ namespace XrdCl
          ++itFs )
       (*itFs)->UnLock();
 
-    pFileTimer->UnLock();
-    if( pPostMaster )
-      pPostMaster->Start();
+    PostMaster *pm = pPostMaster.load();
+    FileTimer *ft = pFileTimer.load();
+    ft->UnLock();
+    if( pm )
+      pm->Start();
 
     pMutex.UnLock();
   }
@@ -122,13 +126,15 @@ namespace XrdCl
          ++itFs )
       (*itFs)->UnLock();
 
-    pFileTimer->UnLock();
-    if( pPostMaster )
+    PostMaster *pm = pPostMaster.load();
+    FileTimer *ft = pFileTimer.load();
+    ft->UnLock();
+    if( pm )
     {
-      pPostMaster->Finalize();
-      pPostMaster->Initialize();
-      pPostMaster->Start();
-      pPostMaster->GetTaskManager()->RegisterTask( pFileTimer, time(0), false );
+      pm->Finalize();
+      pm->Initialize();
+      pm->Start();
+      pm->GetTaskManager()->RegisterTask( ft, time(0), false );
     }
 
     pMutex.UnLock();

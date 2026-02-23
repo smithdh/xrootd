@@ -20,6 +20,7 @@
 #define __XRD_CL_FORK_HANDLER_HH__
 
 #include <XrdSys/XrdSysPthread.hh>
+#include <atomic>
 #include <set>
 
 namespace XrdCl
@@ -78,13 +79,11 @@ namespace XrdCl
       //------------------------------------------------------------------------
       void RegisterPostMaster( PostMaster *postMaster )
       {
-        XrdSysMutexHelper scopedLock( pMutex );
         pPostMaster = postMaster;
       }
 
       void RegisterFileTimer( FileTimer *fileTimer )
       {
-        XrdSysMutexHelper scopedLock( pMutex );
         pFileTimer = fileTimer;
       }
 
@@ -106,8 +105,8 @@ namespace XrdCl
     private:
       std::set<FileStateHandler*>  pFileObjects;
       std::set<FileSystem*>        pFileSystemObjects;
-      PostMaster                  *pPostMaster;
-      FileTimer                   *pFileTimer;
+      std::atomic<PostMaster*>     pPostMaster;
+      std::atomic<FileTimer*>      pFileTimer;
       XrdSysMutex                  pMutex;
   };
 }

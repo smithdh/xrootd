@@ -62,11 +62,9 @@ TestEnv::TestEnv()
 //------------------------------------------------------------------------------
 XrdCl::Env *TestEnv::GetEnv()
 {
+  XrdSysMutexHelper scopedLock( sEnvMutex );
   if( !sEnv )
   {
-    XrdSysMutexHelper scopedLock( sEnvMutex );
-    if( sEnv )
-      return sEnv;
     sEnv = new TestEnv();
   }
   return sEnv;

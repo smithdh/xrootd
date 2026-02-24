@@ -41,6 +41,7 @@ jobs:
       CC: clang
       CXX: clang++
       XRD_AIOLOCAL: 0
+      TZ: localtime
 
     steps:
     - name: Install dependencies

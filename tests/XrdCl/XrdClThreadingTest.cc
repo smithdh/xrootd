@@ -22,6 +22,7 @@
 #include "XrdCl/XrdClFile.hh"
 #include "XrdCl/XrdClDefaultEnv.hh"
 #include "XrdCl/XrdClUtils.hh"
+#include "XrdSys/XrdSysPthread.hh"
 #include <pthread.h>
 #include <unistd.h>
 #include <cstdlib>
@@ -36,12 +37,13 @@ struct ThreadData
 {
   ThreadData():
     file( 0 ), startOffset( 0 ), length( 0 ), checkSum( 0 ),
-    firstBlockChecksum(0) {}
+    firstBlockChecksum(0), sem(0) {}
   XrdCl::File *file;
   uint64_t     startOffset;
   uint64_t     length;
   uint32_t     checkSum;
   uint32_t     firstBlockChecksum;
+  XrdSysSemaphore *sem;
 };
 
 const uint32_t MB = 1024*1024;
@@ -94,6 +96,9 @@ void *DataReader( void *arg )
 
   delete [] buffer;
 
+  if (td->sem)
+    td->sem->Post();
+
   return 0;
 }
 
@@ -129,6 +134,7 @@ void ThreadingTest::ReadTestFunc( TransferCallback transferCallback )
   for( int i = 0; i < 5; ++i )
     fileUrl[i] = address + "/" + path[i];
 
+  XrdSysSemaphore waitsem(0);
   //----------------------------------------------------------------------------
   // Open and stat the files
   //----------------------------------------------------------------------------
@@ -147,6 +153,7 @@ void ThreadingTest::ReadTestFunc( TransferCallback transferCallback )
 
     for( int j = 0; j < 4; ++j )
     {
+      threadData[j*5+i].sem         = &waitsem;
       threadData[j*5+i].file        = f;
       threadData[j*5+i].startOffset = j*step;
       threadData[j*5+i].length      = step;
@@ -176,15 +183,22 @@ void ThreadingTest::ReadTestFunc( TransferCallback transferCallback )
   // Spawn the threads and wait for them to finish
   //----------------------------------------------------------------------------
   pthread_t thread[20];
+  pthread_attr_t attr;
+
+  /* Initialize and set thread detached attribute. This is so  */
+  /* checkers such a tsan do not detect a thread leak in child */
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   for( int i = 0; i < 20; ++i )
-    EXPECT_PTHREAD_OK( pthread_create( &(thread[i]), 0,
+    EXPECT_PTHREAD_OK( pthread_create( &(thread[i]), &attr,
                                        ::DataReader, &(threadData[i]) ) );
+  pthread_attr_destroy(&attr);
 
   if( transferCallback )
     (*transferCallback)( threadData );
 
   for( int i = 0; i < 20; ++i )
-    EXPECT_PTHREAD_OK( pthread_join( thread[i], 0 ) );
+    waitsem.Wait();
 
   //----------------------------------------------------------------------------
   // Glue up and compare the checksums

@@ -32,6 +32,7 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <vector>
 
 #include "XrdPosix/XrdPosixObject.hh"
 #include "XrdPosix/XrdPosixTrace.hh"
@@ -52,8 +53,10 @@ extern thread_local XrdOucECMsg ecMsg;
 /******************************************************************************/
 
 XrdSysMutex      XrdPosixObject::fdMutex;
-XrdPosixObject **XrdPosixObject::myFiles  =  0;
-int              XrdPosixObject::highFD   = -1;
+std::atomic_flag XrdPosixObject::myFilesSpinRd = ATOMIC_FLAG_INIT;
+std::atomic_flag XrdPosixObject::myFilesSpinWr = ATOMIC_FLAG_INIT;
+std::atomic<std::atomic<XrdPosixObject*>*> XrdPosixObject::myFiles  =  0;
+std::atomic<int> XrdPosixObject::highFD   = -1;
 int              XrdPosixObject::lastFD   = -1;
 int              XrdPosixObject::baseFD   =  0;
 int              XrdPosixObject::freeFD   =  0;
@@ -66,8 +69,16 @@ int              XrdPosixObject::devNull  = -1;
   
 bool XrdPosixObject::AssignFD(bool isStream)
 {
+   while(myFilesSpinWr.test_and_set()) { }
+   if (!myFiles) {
+     myFilesSpinWr.clear();
+     return 0;
+   }
+
    XrdSysMutexHelper fdHelper(fdMutex);
    int  fd;
+
+   myFilesSpinWr.clear();
 
 // Obtain a new filedscriptor from the system. Use the fd to track the object.
 // Streams are not supported for virtual file descriptors.
@@ -110,12 +121,14 @@ XrdPosixDir *XrdPosixObject::Dir(int fd, bool glk)
 
 // Validate the fildes
 //
-do{if (fd >= lastFD || fd < baseFD)
-      {errno = EBADF; return (XrdPosixDir *)0;}
+do{while(myFilesSpinWr.test_and_set()) { }
+   if (!myFiles || fd >= lastFD || fd < baseFD)
+      {myFilesSpinWr.clear(); errno = EBADF; return (XrdPosixDir *)0;}
 
 // Obtain the file object, if any
 //
    fdMutex.Lock();
+   myFilesSpinWr.clear();
    if (!(oP = myFiles[fd - baseFD]) || !(oP->Who(&dP)))
       {fdMutex.UnLock(); errno = EBADF; return (XrdPosixDir *)0;}
 
@@ -161,12 +174,14 @@ XrdPosixFile *XrdPosixObject::File(int fd, bool glk)
 
 // Validate the fildes
 //
-do{if (fd >= lastFD || fd < baseFD)
-      {errno = EBADF; return (XrdPosixFile *)0;}
+do{while(myFilesSpinWr.test_and_set()) { }
+   if (!myFiles || fd >= lastFD || fd < baseFD)
+      {myFilesSpinWr.clear(); errno = EBADF; return (XrdPosixFile *)0;}
 
 // Obtain the file object, if any
 //
    fdMutex.Lock();
+   myFilesSpinWr.clear();
    if (!(oP = myFiles[fd - baseFD]) || !(oP->Who(&fP)))
       {fdMutex.UnLock(); errno = EBADF; return (XrdPosixFile *)0;}
 
@@ -207,7 +222,7 @@ int XrdPosixObject::Init(int fdnum)
 {
    static const int maxFD = 1048576;
    struct rlimit rlim;
-   int isize, limfd;
+   int limfd;
 
 // Initialize the /dev/null file descriptors, bail if we cannot
 //
@@ -235,12 +250,11 @@ int XrdPosixObject::Init(int fdnum)
 //
    if (fdnum < 0) {posxFD = fdnum = -fdnum; baseFD = limfd;}
       else         fdnum = limfd;
-   isize = fdnum * sizeof(XrdPosixFile *);
 
 // Allocate the table for fd-type pointers
 //
-   if (!(myFiles = (XrdPosixObject **)malloc(isize))) lastFD = -1;
-      else {memset((void *)myFiles, 0, isize); lastFD = fdnum+baseFD;}
+   if (!(myFiles = new std::atomic<XrdPosixObject*>[fdnum])) lastFD = -1;
+      else {for(int i=0;i<fdnum;++i) {myFiles[i]=0;}; lastFD = fdnum+baseFD;}
 
 // All done
 //
@@ -318,19 +332,32 @@ void XrdPosixObject::Shutdown()
 {
    XrdPosixObject *oP;
    int i;
+   std::vector<XrdPosixObject*> todel;
 
 // Destroy all files and static data
 //
+   while(myFilesSpinRd.test_and_set()) { }
+   while(myFilesSpinWr.test_and_set()) { }
    fdMutex.Lock();
-   if (myFiles)
+   auto files = myFiles.load();
+   myFiles = 0;
+   myFilesSpinWr.clear();
+   myFilesSpinRd.clear();
+
+   if (files)
       {for (i = 0; i <= highFD; i++) 
-           if ((oP = myFiles[i]))
-              {myFiles[i] = 0;
+           if ((oP = files[i]))
+              {files[i] = 0;
                if (oP->fdNum >= 0) close(oP->fdNum);
                oP->fdNum = -1;
-               delete oP;
+               todel.push_back(oP);
               };
-       free(myFiles); myFiles = 0;
+       delete[] files;
       }
    fdMutex.UnLock();
+
+   for(auto &obj: todel)
+     {obj->Lock(); obj->UnLock();
+      delete obj;
+     }
 }

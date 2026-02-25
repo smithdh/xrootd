@@ -30,6 +30,7 @@
 /* specific prior written permission of the institution or contributor.       */
 /******************************************************************************/
 
+#include <atomic>
 #include <sys/types.h>
 
 #include "XrdOuc/XrdOucECMsg.hh"
@@ -83,8 +84,12 @@ static  void          Shutdown();
         void          UnLock() {objMutex.UnLock();}
 
 static  bool          Valid(int fd)
-                           {return fd >= baseFD && fd <= (highFD+baseFD)
-                                   && myFiles && myFiles[fd-baseFD];}
+                           {while(myFilesSpinRd.test_and_set()) { }
+                            const bool ret = fd >= baseFD && fd <= (highFD+baseFD)
+                                   && myFiles && myFiles[fd-baseFD];
+                            myFilesSpinRd.clear();
+                            return ret;
+                           }
 
 virtual bool          Who(XrdPosixDir  **dirP)  {return false;}
 
@@ -104,9 +109,11 @@ protected:
 private:
 
 static XrdSysMutex      fdMutex;
-static XrdPosixObject **myFiles;
+static std::atomic_flag myFilesSpinRd;
+static std::atomic_flag myFilesSpinWr;
+static std::atomic<std::atomic<XrdPosixObject*>*> myFiles;
 static int              lastFD;
-static int              highFD;
+static std::atomic<int> highFD;
 static int              baseFD;
 static int              freeFD;
 static int              posxFD;

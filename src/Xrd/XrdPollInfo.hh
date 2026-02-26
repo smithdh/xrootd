@@ -29,6 +29,8 @@
 /* specific prior written permission of the institution or contributor.       */
 /******************************************************************************/
 
+#include <atomic>
+
 class  XrdLink;
 class  XrdPoll;
 struct pollfd;
@@ -43,7 +45,7 @@ struct pollfd *PollEnt;     // Used only by PollPoll
 XrdPoll       *Poller;      // -> Poller object associated with this object
 int            FD;          // Associated target file descriptor number
 bool           inQ;         // True -> in a PollPoll event queue
-bool           isEnabled;   // True -> interrupts are enabled
+std::atomic<bool> isEnabled;// True -> interrupts are enabled
 char           rsv[2];      // Reserved for future flags
 
 void           Zorch() {Next      = 0;     PollEnt  = 0;

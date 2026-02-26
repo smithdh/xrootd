@@ -131,6 +131,8 @@ void XrdLinkXeq::Reset()
    LinkInfo.Reset();
    PollInfo.Zorch();
    ResetLink();
+
+   LinkInfo.opMutex.ReInitRecMutex();
 }
 
 /******************************************************************************/

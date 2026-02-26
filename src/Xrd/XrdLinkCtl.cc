@@ -72,7 +72,7 @@ using namespace XrdGlobal;
           while (i >>= 1) j <<= 1;
           return j;
        } ();
-       int             XrdLinkCtl::LTLast   = -1;
+       std::atomic<int> XrdLinkCtl::LTLast   = -1;
        int             XrdLinkCtl::maxFD    = 0;
        XrdSysMutex     XrdLinkCtl::LTMutex;
        short           XrdLinkCtl::killWait = 3;  // Kill then wait;

@@ -1422,10 +1422,10 @@ int XrdXrootdProtocol::do_OffloadIO()
 //
    if (rc) isNOP = true;
    isActive = false;
-   Stream[0]->Link->setRef(-1);
    if (reTry) {reTry->Post(); reTry = 0;}
    if (endNote) endNote->Signal();
    streamMutex.UnLock();
+   Stream[0]->Link->setRef(-1);
    TRACEP(FSZIO, "offload complete path "<<PathID<<" virt rc=" <<rc);
    return (rc ? rc : -EINPROGRESS);
 }

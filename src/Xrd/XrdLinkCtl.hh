@@ -29,6 +29,7 @@
 /* specific prior written permission of the institution or contributor.       */
 /******************************************************************************/
 
+#include <atomic>
 #include "Xrd/XrdLinkXeq.hh"
 
 #include "XrdSys/XrdSysPthread.hh"
@@ -212,7 +213,7 @@ static XrdSysMutex   LTMutex;    // For the LinkTab only LTMutex->IOMutex allowe
 static XrdLinkCtl  **LinkTab;
 static char         *LinkBat;
 static const unsigned int LinkAlloc;
-static int           LTLast;
+static std::atomic<int>   LTLast;
 static int           maxFD;
 static const char   *TraceID;
 };

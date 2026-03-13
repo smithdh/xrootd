@@ -31,6 +31,7 @@
 /******************************************************************************/
 
 #include "XrdSys/XrdSysPthread.hh"
+#include "XrdSys/XrdSysRAtomic.hh"
 #include "XrdCms/XrdCmsTypes.hh"
 
 class XrdLink;
@@ -39,8 +40,8 @@ class XrdCmsState
 {
 public:
 
-int   Suspended;
-int   NoStaging;
+RAtomic_int   Suspended;
+RAtomic_int   NoStaging;
 
 void  Enable();
 

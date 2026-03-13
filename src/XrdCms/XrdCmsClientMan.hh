@@ -38,7 +38,6 @@
 #include "XrdCms/XrdCmsResp.hh"
 #include "XrdOuc/XrdOucBuffer.hh"
 #include "XrdOuc/XrdOucErrInfo.hh"
-#include "XrdSys/XrdSysAtomics.hh"
 #include "XrdSys/XrdSysPthread.hh"
 
 class XrdInet;
@@ -52,7 +51,7 @@ static char          doDebug;
 
 int                  delayResp(XrdOucErrInfo &Resp);
 
-inline int           isActive() {AtomicRet(myData, Active);}
+inline int           isActive() {myData.Lock(); int ret = Active; myData.UnLock(); return ret;}
 
 XrdCmsClientMan     *nextManager() {return Next;}
 
@@ -67,9 +66,9 @@ int                  Send(unsigned int &iMan,  const struct iovec *iov,
 
 void                *Start();
 
-inline int           Suspended() {AtomicBeg(myData);
-                                  int sVal = AtomicGet(Suspend);
-                                  AtomicEnd(myData);
+inline int           Suspended() {myData.Lock();
+                                  int sVal = Suspend;
+                                  myData.UnLock();
                                   if (!sVal) return sVal;
                                   return chkStatus();
                                  }
@@ -83,7 +82,7 @@ static void          setConfig(const char *cfn) {ConfigFN = cfn;}
 int                  whatsUp(const char *user, const char *path,
                              unsigned int iMan);
 
-inline int           waitTime() {AtomicRet(myData, repWait);}
+inline int           waitTime() {myData.Lock(); int ret = repWait; myData.UnLock(); return ret;}
 
                   XrdCmsClientMan(char *host,int port,int cw,int nr,int rw,int rd);
                  ~XrdCmsClientMan();

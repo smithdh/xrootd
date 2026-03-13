@@ -2779,6 +2779,8 @@ int XrdOfs::fsError(XrdOucErrInfo &myError, int rc)
 
 // Screen the error code (update statistics w/o a lock for speed!)
 //
+   XrdSysMutexHelper lck( OfsStats.sdMutex );
+
    if (rc == SFS_REDIRECT) {OfsStats.Data.numRedirect++; return SFS_REDIRECT;}
    if (rc == SFS_STARTED)  {OfsStats.Data.numStarted++;  return SFS_STARTED; }
    if (rc > 0)             {OfsStats.Data.numDelays++;   return rc;          }

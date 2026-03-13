@@ -31,6 +31,7 @@
 
 #include <poll.h>
 #include "XrdSys/XrdSysPthread.hh"
+#include "XrdSys/XrdSysRAtomic.hh"
 
 #define XRD_NUMPOLLERS 3
 
@@ -129,13 +130,13 @@ int           PipeBlen;
 
 // The following are statistical counters each implementation must maintain
 //
-           int         numEnabled;     // Count of Enable() calls
+           RAtomic_int numEnabled;     // Count of Enable() calls
            int         numEvents;      // Count of poll fd's dispatched
            int         numInterrupts;  // Number of interrupts (e.g., signals)
 
 private:
 
 static     XrdSysMutex  doingAttach;
-           int          numAttached;    // Number of fd's attached to poller
+           RAtomic_int  numAttached;    // Number of fd's attached to poller
 };
 #endif

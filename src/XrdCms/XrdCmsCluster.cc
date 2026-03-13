@@ -1605,7 +1605,7 @@ int XrdCmsCluster::SelNode(XrdCmsSelect &Sel, SMask_t pmask, SMask_t amask)
 // point we omit all peer nodes as they are our last resort. Note that Selbyxxx
 // returns the node unlocked but we have the global mutex so that is OK.
 //
-   STMutex.ReadLock();
+   STMutex.WriteLock();
    mask = pmask & peerMask;
    while(pass--)
         {if (mask)

@@ -822,14 +822,21 @@ int TPCHandler::ProcessPushReq(const std::string & resource, XrdHttpExtReq &req)
     }
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long) CURL_HTTP_VERSION_1_1);
-//  curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_setcloexec_callback);
-
+#if CURL_AT_LEAST_VERSION(7, 85, 0)
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR,       "https,http");
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https,http");
+#else
+    long protocols = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, protocols);
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, protocols);
+#endif
     curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
     curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, &rec);
     curl_easy_setopt(curl, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
     curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
     curl_easy_setopt(curl, CURLOPT_CLOSESOCKETDATA, &rec);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, CONNECT_TIMEOUT);
+
     auto query_header = XrdOucTUtils::caseInsensitiveFind(req.headers,"xrd-http-fullresource");
     std::string redirect_resource = req.resource;
     if (query_header != req.headers.end()) {
@@ -903,6 +910,7 @@ int TPCHandler::ProcessPullReq(const std::string &resource, XrdHttpExtReq &req) 
         logTransferEvent(LogMask::Error, rec, "PULL_FAIL", ss.str());
         return req.SendSimpleResp(rec.status, NULL, NULL, generateClientErr(ss, rec).c_str(), 0);
     }
+
     // ddavila 2023-01-05:
     // The following change was required by the Rucio/SENSE project where
     // multiple IP addresses, each from a different subnet, are assigned to a
@@ -937,7 +945,14 @@ int TPCHandler::ProcessPullReq(const std::string &resource, XrdHttpExtReq &req) 
     }
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long) CURL_HTTP_VERSION_1_1);
-//  curl_easy_setopt(curl,CURLOPT_SOCKOPTFUNCTION,sockopt_setcloexec_callback);
+#if CURL_AT_LEAST_VERSION(7, 85, 0)
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR,       "https,http");
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https,http");
+#else
+    long protocols = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, protocols);
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, protocols);
+#endif
     curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
     curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, &rec);
     curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);

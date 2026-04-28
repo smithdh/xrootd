@@ -233,7 +233,7 @@ inline std::string encode_opaque(const std::string & opaque) {
       if(!first) {
         output << "&";
       }
-      output << key << "=" << encode_str(value);
+      output << encode_str(key) << "=" << encode_str(value);
       first = false;
     }
   }

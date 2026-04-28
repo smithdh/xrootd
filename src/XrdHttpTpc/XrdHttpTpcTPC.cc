@@ -238,11 +238,15 @@ bool TPCHandler::MatchesPath(const char *verb, const char *path) {
 /*                            P r e p a r e U R L                             */
 /******************************************************************************/
   
-static std::string PrepareURL(const std::string &input) {
-    if (!strncmp(input.c_str(), "davs://", 7)) {
-        return "https://" + input.substr(7);
-    }
-    return input;
+static std::string PrepareURL(const std::string &url)
+{
+  const std::string replace_schemes[] = { "davs://", "s3://", "s3s://" };
+
+  for (const auto& s : replace_schemes)
+    if (url.compare(0, s.size(), s) == 0)
+      return "https://" + url.substr(s.size());
+
+  return url;
 }
 
 static bool IsAllowedScheme(const std::string& url)

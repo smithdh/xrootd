@@ -265,11 +265,8 @@ struct MapRule
 
         if (!m_username.empty() && username != m_username) {return "";}
 
-        if (!m_path_prefix.empty() &&
-            strncmp(req_path.c_str(), m_path_prefix.c_str(), m_path_prefix.size()))
-        {
+        if (!m_path_prefix.empty() && !is_subdirectory(m_path_prefix, req_path))
             return "";
-        }
 
         if (!m_group.empty()) {
             for (const auto &group : groups) {

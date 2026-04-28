@@ -477,34 +477,45 @@ int TPCHandler::DetermineXferSize(CURL *curl, XrdHttpExtReq &req, State &state,
     curl_easy_setopt(curl, CURLOPT_NOBODY, 0);
     // Reset the CURLOPT_TIMEOUT to no timeout (default)
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 0L);
-    if (res == CURLE_HTTP_RETURNED_ERROR) {
-        std::stringstream ss;
-        ss << "Remote server failed request while fetching remote size";
-        std::stringstream ss2;
-        ss2 << ss.str() << ": " << curl_easy_strerror(res);
-        rec.status = 500;
-        logTransferEvent(LogMask::Error, rec, "SIZE_FAIL", ss2.str());
-        return shouldReturnErrorToClient ? req.SendSimpleResp(rec.status, NULL, NULL, generateClientErr(ss, rec, res).c_str(), 0) : -1;
-    } else if (state.GetStatusCode() >= 400) {
-        std::stringstream ss;
-        ss << "Remote side " << req.clienthost << " failed with status code " << state.GetStatusCode() << " while fetching remote size";
-        rec.status = 500;
-        logTransferEvent(LogMask::Error, rec, "SIZE_FAIL", ss.str());
-        return shouldReturnErrorToClient ? req.SendSimpleResp(rec.status, NULL, NULL, generateClientErr(ss, rec).c_str(), 0) : -1;
-    } else if (res) {
-        std::stringstream ss;
-        ss << "Internal transfer failure while fetching remote size";
-        std::stringstream ss2;
-        ss2 << ss.str() << " - HTTP library failed: " << curl_easy_strerror(res);
-        rec.status = 500;
-        logTransferEvent(LogMask::Error, rec, "SIZE_FAIL", ss2.str());
-        return shouldReturnErrorToClient ? req.SendSimpleResp(rec.status, NULL, NULL, generateClientErr(ss, rec, res).c_str(), 0) : -1;
-    }
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+
     std::stringstream ss;
-    ss << "Successfully determined remote size for pull request: "
-       << state.GetContentLength();
-    logTransferEvent(LogMask::Debug, rec, "SIZE_SUCCESS", ss.str());
+
+    if (state.GetStatusCode() >= 400)
+      res = CURLE_HTTP_RETURNED_ERROR;
+
+    if (res != CURLE_OK) { /* curl failed */
+      ss << curl_easy_strerror(res);
+      switch (res) {
+      case CURLE_HTTP_RETURNED_ERROR: /* remote side may have returned an error */
+        rec.tpc_status = state.GetStatusCode(); /* relay status received from remote side to the client */
+        ss << ": remote host returned '" << rec.tpc_status << " "
+           << httpStatusToString(rec.tpc_status) << "' while fetching file size";
+        break;
+      case CURLE_COULDNT_CONNECT: /* socket callback may have failed */
+        switch (rec.tpc_status) {
+        case 403:
+          ss << ": connection to local/private addresses is forbidden";
+          break;
+        default:
+          ss << ": internal server failure";
+          rec.tpc_status = 500;
+        }
+        break;
+      default:
+        rec.tpc_status = 500;
+        state.SetErrorCode(500);
+      }
+    }
+
+    if (rec.tpc_status >= 400) {
+      logTransferEvent(LogMask::Error, rec, "SIZE_FAIL", ss.str());
+      return shouldReturnErrorToClient ? req.SendSimpleResp(rec.tpc_status, NULL, NULL, generateClientErr(ss, rec, res).c_str(), 0) : -1;
+    }
+
     success = true;
+    ss << "Successfully determined remote size for pull request: " << state.GetContentLength();
+    logTransferEvent(LogMask::Debug, rec, "SIZE_SUCCESS", ss.str());
     return 0;
 }
 

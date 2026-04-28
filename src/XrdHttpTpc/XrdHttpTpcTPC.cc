@@ -120,24 +120,43 @@ int TPCHandler::opensocket_callback(void *clientp,
                                     curlsocktype purpose,
                                     struct curl_sockaddr *aInfo)
 {
-  //Return a socket file descriptor (note the clo_exec flag will be set).
+  /* CURLSOCKTYPE_IPCXN (for IP based connections) is the only type currently known by curl,
+   * so let's make sure to reject other types if they appear in the furure */
+  if (purpose != CURLSOCKTYPE_IPCXN)
+    return CURL_SOCKET_BAD;
+
+  if (!aInfo)
+    return CURL_SOCKET_BAD;
+
+  // Create the socket (note that O_CLOEXEC flag will be set)
   int fd = XrdSysFD_Socket(aInfo->family, aInfo->socktype, aInfo->protocol);
-  // See what kind of address will be used to connect
-  //
-  if(fd < 0) {
+
+  if (fd < 0) {
     return CURL_SOCKET_BAD;
   }
-  TPCLogRecord * rec = (TPCLogRecord *)clientp;
-  if (purpose == CURLSOCKTYPE_IPCXN && clientp)
-  {XrdNetAddr thePeer(&(aInfo->addr));
-    rec->isIPv6 =  (thePeer.isIPType(XrdNetAddrInfo::IPv6)
-                    && !thePeer.isMapped());
-    std::stringstream connectErrMsg;
 
-    if(!rec->pmarkManager.connect(fd, &(aInfo->addr), aInfo->addrlen, CONNECT_TIMEOUT, connectErrMsg)) {
-      rec->m_log->Emsg(rec->log_prefix.c_str(),"Unable to connect socket:", connectErrMsg.str().c_str());
-      return CURL_SOCKET_BAD;
-    }
+  if (!clientp)
+    return fd;
+
+  XrdNetAddr thePeer(&(aInfo->addr));
+  TPCLogRecord *rec = static_cast<TPCLogRecord*>(clientp);
+
+  /* Reject attempts to connect to local/private addresses unless allowed by configuration */
+  if ((!rec->allow_private && thePeer.isPrivate()) || (!rec->allow_local && thePeer.isLocal())) {
+    rec->tpc_status = 403; // Forbidden
+    rec->m_log->Emsg(rec->log_prefix.c_str(),
+      "Connection to local/private address is forbidden");
+    close(fd);
+    return CURL_SOCKET_BAD;
+  }
+
+  rec->isIPv6 = (thePeer.isIPType(XrdNetAddrInfo::IPv6) && !thePeer.isMapped());
+
+  std::stringstream connectErrMsg;
+  if(!rec->pmarkManager.connect(fd, &(aInfo->addr), aInfo->addrlen, CONNECT_TIMEOUT, connectErrMsg)) {
+    rec->m_log->Emsg(rec->log_prefix.c_str(), "Unable to connect socket: ", connectErrMsg.str().c_str());
+    close(fd);
+    return CURL_SOCKET_BAD;
   }
 
   return fd;
@@ -312,6 +331,8 @@ TPCHandler::~TPCHandler() {
 /******************************************************************************/
   
 TPCHandler::TPCHandler(XrdSysError *log, const char *config, XrdOucEnv *myEnv) :
+        m_allow_local(false),
+        m_allow_private(true),
         m_desthttps(false),
         m_fixed_route(false),
         m_timeout(60),
@@ -802,6 +823,8 @@ int TPCHandler::RunCurlWithUpdates(CURL *curl, XrdHttpExtReq &req, State &state,
   
 int TPCHandler::ProcessPushReq(const std::string & resource, XrdHttpExtReq &req) {
     TPCLogRecord rec(req, TpcType::Push);
+    rec.allow_local = m_allow_local;
+    rec.allow_private = m_allow_private;
     rec.log_prefix = "PushRequest";
     rec.local = req.resource;
     rec.remote = resource;
@@ -892,6 +915,8 @@ int TPCHandler::ProcessPushReq(const std::string & resource, XrdHttpExtReq &req)
   
 int TPCHandler::ProcessPullReq(const std::string &resource, XrdHttpExtReq &req) {
     TPCLogRecord rec(req,TpcType::Pull);
+    rec.allow_local = m_allow_local;
+    rec.allow_private = m_allow_private;
     rec.log_prefix = "PullRequest";
     rec.local = req.resource;
     rec.remote = resource;

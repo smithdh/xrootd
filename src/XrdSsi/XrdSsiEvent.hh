@@ -51,9 +51,12 @@ virtual int  XeqEvent(XrdCl::XRootDStatus *st, XrdCl::AnyObject **resp) = 0;
 
 virtual void XeqEvFin() = 0;
 
-             XrdSsiEvent() : XrdJob(tident),  lastEvent(0),
-                             running(false),  isClear(true)
-                             {*tident = 0;}
+             XrdSsiEvent() : XrdJob(), lastEvent(nullptr),
+                             running(false), isClear(true)
+             {
+               tident[0] = '\0';
+               Comment = tident;
+             }
 
             ~XrdSsiEvent() {if (!isClear) ClrEvent(&thisEvent);}
 

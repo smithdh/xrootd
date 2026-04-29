@@ -64,11 +64,11 @@ XrdOucNSWalk::XrdOucNSWalk(XrdSysError *erp, const char *dpath,
 
 // Copy the exclude list if one exists
 //
-   if (!xlist) XList = 0;
-      else while(xlist)
-                {XList = new XrdOucTList(xlist->text,xlist->ival,XList);
-                 xlist = xlist->next;
-                }
+   XList = nullptr;
+   while(xlist)
+   {XList = new XrdOucTList(xlist->text,xlist->ival,XList);
+    xlist = xlist->next;
+   }
 }
 
 /******************************************************************************/

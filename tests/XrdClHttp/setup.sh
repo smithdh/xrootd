@@ -244,6 +244,7 @@ ofs.osslib ++ $BINARY_DIR/lib/libXrdOssSlowOpen.so
 
 # Required for the COPY tests
 http.exthandler xrdtpc libXrdHttpTPC.so
+tpc.allow local
 
 EOF
 

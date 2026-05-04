@@ -175,6 +175,42 @@ int XrdNetAddrInfo::Format(char *bAddr, int bLen, fmtUse theFmt, int fmtOpts)
 }
 
 /******************************************************************************/
+/*                             i s L o c a l                                  */
+/******************************************************************************/
+
+bool XrdNetAddrInfo::isLocal()
+{
+  unsigned char *ipV4 = nullptr;
+
+// For IPv6, return true for link-local (fe80::/10) and loopback (::1)
+//
+   if (IP.Addr.sa_family == AF_INET6)
+      {if ((IN6_IS_ADDR_V4MAPPED(&IP.v6.sin6_addr)))
+          ipV4 = (unsigned char *)&IP.v6.sin6_addr.s6_addr32[3];
+          else  {if ((IN6_IS_ADDR_LINKLOCAL(&IP.v6.sin6_addr))
+                 ||  (IN6_IS_ADDR_LOOPBACK (&IP.v6.sin6_addr))) return true;
+                 return false;
+                }
+      }
+
+// If this is not an IPv4 address, consider it local (e.g. AF_UNIX)
+//
+   if (!ipV4)
+      {if (IP.Addr.sa_family != AF_INET) return true;
+       ipV4 = (unsigned char *)&IP.v4.sin_addr.s_addr;
+      }
+
+// For IPV4, return true for link-local (169.254.0.0/16) and loopback (127.0.0.0/8)
+//
+   if ((ipV4[0] == 169 && ipV4[1] == 254) || ipV4[0] == 127)
+     return true;
+
+// Not a local address
+//
+   return false;
+}
+
+/******************************************************************************/
 /*                            i s L o o p b a c k                             */
 /******************************************************************************/
   

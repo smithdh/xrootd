@@ -4828,7 +4828,6 @@ int XrdSecProtocolgsi::InitProxy(ProxyIn_t *pi, XrdCryptoFactory *cf, X509Chain 
       return -1;
    }
 
-#ifndef HASGRIDPROXYINIT
    //
    // Use internal function for proxy initialization
    //
@@ -4865,61 +4864,6 @@ int XrdSecProtocolgsi::InitProxy(ProxyIn_t *pi, XrdCryptoFactory *cf, X509Chain 
       return 1;
    }
    rc = (*X509CreateProxy)(pi->cert, pi->key, &pxopt, ch, kp, pi->out);
-#else
-   // command string
-   String cmd(kMAXBUFLEN);
-
-   // Check if GLOBUS_LOCATION is defined
-   if (getenv("GLOBUS_LOCATION"))
-      cmd = "source $GLOBUS_LOCATION/etc/globus-user-env.sh;";
-
-   // Add main command
-   cmd += " grid-proxy-init";
-
-   // Add user cert
-   cmd += " -cert ";
-   cmd += pi->cert;
-
-   // Add user key
-   cmd += " -key ";
-   cmd += pi->key;
-
-   // Add CA dir (no support for multi-dirs)
-   String cdir(pi->certdir);
-   cdir.erase(cdir.find(','));
-   cmd += " -certdir ";
-   cmd += cdir;
-
-   // Add validity
-   if (pi->valid) {
-      cmd += " -valid ";
-      cmd += pi->valid;
-   }
-
-   // Add number of bits in key
-   if (pi->bits != XrdCryptoDefRSABits) {
-      cmd += " -bits ";
-      cmd += pi->bits;
-   }
-
-   // Add depth of signature path
-   if (pi->deplen > -1) {
-      cmd += " -path-length ";
-      cmd += pi->deplen;
-   }
-
-   // Add output proxy coordinates
-   if (pi->out) {
-      cmd += " -out ";
-      cmd += pi->out;
-   }
-   // Notify
-   DEBUG("executing: " << cmd);
-
-   // Execute
-   rc = system(cmd.c_str());
-   DEBUG("return code: "<< rc << " (0x"<<(int *)rc<<")");
-#endif
 
    // We are done
    return rc;
@@ -5126,12 +5070,10 @@ int XrdSecProtocolgsi::QueryProxy(bool checkcache, XrdSutCache *cache,
          }
          // We need to explicitely export the proxy in a bucket
          exportbucket = 1;
-#ifndef HASGRIDPROXYINIT
          // Chain is already loaded if we used the internal function
          // to initialize the proxies
          parsefile = 0;
          timestamp = time(0);
-#endif
       }
       ntry--;
 

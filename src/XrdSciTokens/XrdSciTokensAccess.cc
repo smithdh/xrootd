@@ -9,6 +9,8 @@
 #include "XrdTls/XrdTlsContext.hh"
 #include "XrdVersion.hh"
 
+#include <cctype>
+#include <ctime>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -183,6 +185,19 @@ std::string AccessRuleStr(const AccessRulesRaw &rules) {
     return ss.str();
 }
 
+// Returns true iff every character in the string is a valid POSIX username
+// character: [A-Za-z0-9._@-], with a non-empty length and no leading '-'.
+// This prevents attacker-controlled JWT claim values from being forwarded as
+// OS usernames containing path separators, shell metacharacters, or null bytes.
+bool IsSafeUsername(const std::string &name) {
+    if (name.empty() || name[0] == '-') return false;
+    for (unsigned char c : name) {
+        if (!isalnum(c) && c != '_' && c != '.' && c != '@' && c != '-')
+            return false;
+    }
+    return true;
+}
+
 bool MakeCanonical(const std::string &path, std::string &result)
 {
     if (path.empty() || path[0] != '/') {return false;}
@@ -257,11 +272,8 @@ struct MapRule
 
         if (!m_username.empty() && username != m_username) {return "";}
 
-        if (!m_path_prefix.empty() &&
-            strncmp(req_path.c_str(), m_path_prefix.c_str(), m_path_prefix.size()))
-        {
+        if (!m_path_prefix.empty() && !is_subdirectory(m_path_prefix, req_path))
             return "";
-        }
 
         if (!m_group.empty()) {
             for (const auto &group : groups) {
@@ -509,7 +521,7 @@ public:
             // If there's no request-specific token, then see if the ZTN authorization
             // has provided us with a session token.
         if (!authz && Entity && !strcmp("ztn", Entity->prot) && Entity->creds &&
-            Entity->credslen && Entity->creds[Entity->credslen] == '\0')
+            Entity->credslen > 0 && Entity->creds[Entity->credslen] == '\0')
         {
             authz = Entity->creds;
         }
@@ -590,8 +602,8 @@ public:
             if (new_secentity.grps) {
                 memcpy(new_secentity.grps, groups_str.c_str(), groups_str.size());
                 new_secentity.grps[groups_str.size()] = '\0';
+                group_success = true;
             }
-            group_success = true;
         }
 
         std::string username;
@@ -669,12 +681,16 @@ public:
         typedef std::vector<ValidIssuer> Issuers;
         */
         Issuers issuers;
-        for (auto it: m_issuers) {
-            ValidIssuer issuer_info;
-            issuer_info.issuer_name = it.first;
-            issuer_info.issuer_url = it.second.m_url;
-            issuers.push_back(issuer_info);
+        pthread_rwlock_rdlock(&m_config_lock);
+        try {
+            for (const auto &it: m_issuers) {
+                issuers.push_back({it.first, it.second.m_url});
+            }
+        } catch (...) {
+            pthread_rwlock_unlock(&m_config_lock);
+            throw;
         }
+        pthread_rwlock_unlock(&m_config_lock);
         return issuers;
 
     }
@@ -705,8 +721,12 @@ public:
         //
         if (Entity)
            {char *value = nullptr;
-            if (!scitoken_get_claim_string(scitoken, "sub", &value, &err_msg))
+            if (!scitoken_get_claim_string(scitoken, "sub", &value, &err_msg)) {
                Entity->name = strdup(value);
+               free(value);
+            } else {
+               free(err_msg);
+            }
            }
 
         // Return the expiration time of this token if so wanted.
@@ -714,6 +734,7 @@ public:
         if (expT && scitoken_get_expiration(scitoken, expT, &err_msg)) {
             emsg = err_msg;
             free(err_msg);
+            scitoken_destroy(scitoken);
             return false;
         }
 
@@ -807,10 +828,17 @@ private:
             return false;
         }
         if (expiry > 0) {
-            expiry = std::max(static_cast<int64_t>(monotonic_time() - expiry),
-                static_cast<int64_t>(60));
+            const auto now_wall = static_cast<long long>(std::time(nullptr));
+            const auto remaining = expiry - now_wall;
+            if (remaining <= 0) {
+                m_log.Log(LogMask::Warning, "GenerateAcls", "Token already expired.");
+                scitoken_destroy(token);
+                return false;
+            }
+            expiry = std::min(static_cast<int64_t>(remaining),
+                              static_cast<int64_t>(m_expiry_secs));
         } else {
-            expiry = 60;
+            expiry = m_expiry_secs;
         }
 
         char *value = nullptr;
@@ -842,6 +870,11 @@ private:
             return false;
         }
         enforcer_destroy(enf);
+        // Ensure acls are freed on all paths below via RAII wrapper.
+        struct AclGuard {
+            Acl *ptr;
+            ~AclGuard() { if (ptr) enforcer_acl_free(ptr); }
+        } acl_guard{acls};
 
         pthread_rwlock_rdlock(&m_config_lock);
         auto iter = m_issuers.find(token_issuer);
@@ -887,6 +920,11 @@ private:
             }
             tmp_username = std::string(value);
             free(value);
+            if (!IsSafeUsername(tmp_username)) {
+                m_log.Log(LogMask::Warning, "GenerateAcls", "Token username claim contains unsafe characters; rejecting:", tmp_username.c_str());
+                scitoken_destroy(token);
+                return false;
+            }
         } else if (!config.m_map_subject) {
             tmp_username = config.m_default_user;
         }
@@ -1003,6 +1041,7 @@ private:
         username = std::move(tmp_username);
         issuer = std::move(token_issuer);
         groups = std::move(groups_parsed);
+        scitoken_destroy(token);
 
         return true;
     }
@@ -1165,7 +1204,7 @@ private:
     bool Reconfig()
     {
         errno = 0;
-        m_cfg_file = "/etc/xrootd/scitokens.cfg";
+        std::string new_cfg_file = "/etc/xrootd/scitokens.cfg";
         if (!m_parms.empty()) {
             size_t pos = 0;
             std::vector<std::string> arg_list;
@@ -1184,12 +1223,12 @@ private:
                     m_log.Log(LogMask::Error, "Reconfig", "Ignoring unknown configuration argument:", arg.c_str());
                     continue;
                 }
-                m_cfg_file = std::string(arg.c_str() + 7);
+                new_cfg_file = std::string(arg.c_str() + 7);
             }
         }
-        m_log.Log(LogMask::Info, "Reconfig", "Parsing configuration file:", m_cfg_file.c_str());
+        m_log.Log(LogMask::Info, "Reconfig", "Parsing configuration file:", new_cfg_file.c_str());
 
-        OverrideINIReader reader(m_cfg_file);
+        OverrideINIReader reader(new_cfg_file);
         if (reader.ParseError() < 0) {
             std::stringstream ss;
             ss << "Error opening config file (" << m_cfg_file << "): " << strerror(errno);
@@ -1203,6 +1242,7 @@ private:
         }
         std::vector<std::string> audiences;
         std::unordered_map<std::string, IssuerConfig> issuers;
+        AuthzBehavior new_authz_behavior = m_authz_behavior;
         for (const auto &section : reader.Sections()) {
             std::string section_lower;
             std::transform(section.begin(), section.end(), std::back_inserter(section_lower),
@@ -1244,11 +1284,11 @@ private:
                 }
                 auto onmissing = reader.Get(section, "onmissing", "");
                 if (onmissing == "passthrough") {
-                    m_authz_behavior = AuthzBehavior::PASSTHROUGH;
+                    new_authz_behavior = AuthzBehavior::PASSTHROUGH;
                 } else if (onmissing == "allow") {
-                    m_authz_behavior = AuthzBehavior::ALLOW;
+                    new_authz_behavior = AuthzBehavior::ALLOW;
                 } else if (onmissing == "deny") {
-                    m_authz_behavior = AuthzBehavior::DENY;
+                    new_authz_behavior = AuthzBehavior::DENY;
                 } else if (!onmissing.empty()) {
                     m_log.Log(LogMask::Error, "Reconfig", "Unknown value for onmissing key:", onmissing.c_str());
                     return false;
@@ -1338,6 +1378,8 @@ private:
 
         pthread_rwlock_wrlock(&m_config_lock);
         try {
+            m_authz_behavior = new_authz_behavior;
+            m_cfg_file = std::move(new_cfg_file);
             m_audiences = std::move(audiences);
             size_t idx = 0;
             m_audiences_array.resize(m_audiences.size() + 1);

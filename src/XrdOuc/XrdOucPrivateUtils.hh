@@ -28,13 +28,14 @@
 #include <regex>
 #include <string>
 #include <unordered_set>
+#include <string_view>
 #include <vector>
 
 /**
  * Returns true if path @p subdir is a subdirectory of @p dir.
  */
-static inline bool is_subdirectory(const std::string& dir,
-                                   const std::string& subdir)
+static inline bool is_subdirectory(const std::string_view dir,
+                                   const std::string_view subdir)
 {
     if (subdir.size() < dir.size() || dir.empty())
       return false;

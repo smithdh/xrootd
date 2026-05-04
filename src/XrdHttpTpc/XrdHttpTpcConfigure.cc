@@ -53,6 +53,36 @@ bool TPCHandler::Configure(const char *configfn, XrdOucEnv *myEnv)
                 m_log.Emsg("Config", "https.desthttps value is invalid", val);
                 return false;
             }
+        } else if (!strcmp("tpc.allow", val)) {
+            if (!(val = Config.GetWord())) {
+                Config.Close();
+                m_log.Emsg("Config", "tpc.allow value not specified");
+                return false;
+            }
+            if (strcmp(val, "local") == 0) {
+              m_allow_local = true;
+            } else if (strcmp(val, "private") == 0) {
+              m_allow_private = true;
+            } else {
+                Config.Close();
+                m_log.Emsg("Config", "tpc.allow value is invalid", val);
+                return false;
+            }
+        } else if (!strcmp("tpc.deny", val)) {
+            if (!(val = Config.GetWord())) {
+                Config.Close();
+                m_log.Emsg("Config", "tpc.deny value not specified");
+                return false;
+            }
+            if (strcmp(val, "local") == 0) {
+              m_allow_local = false;
+            } else if (strcmp(val, "private") == 0) {
+              m_allow_private = false;
+            } else {
+                Config.Close();
+                m_log.Emsg("Config", "tpc.deny value is invalid", val);
+                return false;
+            }
         } else if (!strcmp("tpc.trace", val)) {
             if (!ConfigureLogger(Config)) {
                 Config.Close();

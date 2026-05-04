@@ -146,6 +146,15 @@ enum IPType {IPv4 = AF_INET, IPv6 = AF_INET6, IPuX = AF_UNIX};
 bool        isIPType(IPType ipType) const {return IP.Addr.sa_family == ipType;}
 
 //------------------------------------------------------------------------------
+//! Indicate whether or not our address is local.
+//!
+//! @return True:    This address is     local.
+//!         False:   This address is not local.
+//------------------------------------------------------------------------------
+
+bool        isLocal();
+
+//------------------------------------------------------------------------------
 //! Indicate whether or not our address is an IPv4 mapped to IPv6 address.
 //!
 //! @return True:  The address is     a mapped IPv4 address.

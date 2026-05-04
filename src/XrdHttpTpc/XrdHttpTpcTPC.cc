@@ -121,24 +121,43 @@ int TPCHandler::opensocket_callback(void *clientp,
                                     curlsocktype purpose,
                                     struct curl_sockaddr *aInfo)
 {
-  //Return a socket file descriptor (note the clo_exec flag will be set).
+  /* CURLSOCKTYPE_IPCXN (for IP based connections) is the only type currently known by curl,
+   * so let's make sure to reject other types if they appear in the furure */
+  if (purpose != CURLSOCKTYPE_IPCXN)
+    return CURL_SOCKET_BAD;
+
+  if (!aInfo)
+    return CURL_SOCKET_BAD;
+
+  // Create the socket (note that O_CLOEXEC flag will be set)
   int fd = XrdSysFD_Socket(aInfo->family, aInfo->socktype, aInfo->protocol);
-  // See what kind of address will be used to connect
-  //
-  if(fd < 0) {
+
+  if (fd < 0) {
     return CURL_SOCKET_BAD;
   }
-  TPCLogRecord * rec = (TPCLogRecord *)clientp;
-  if (purpose == CURLSOCKTYPE_IPCXN && clientp)
-  {XrdNetAddr thePeer(&(aInfo->addr));
-    rec->isIPv6 =  (thePeer.isIPType(XrdNetAddrInfo::IPv6)
-                    && !thePeer.isMapped());
-    std::stringstream connectErrMsg;
 
-    if(!rec->pmarkManager.connect(fd, &(aInfo->addr), aInfo->addrlen, CONNECT_TIMEOUT, connectErrMsg)) {
-      rec->m_log->Emsg(rec->log_prefix.c_str(),"Unable to connect socket:", connectErrMsg.str().c_str());
-      return CURL_SOCKET_BAD;
-    }
+  if (!clientp)
+    return fd;
+
+  XrdNetAddr thePeer(&(aInfo->addr));
+  TPCLogRecord *rec = static_cast<TPCLogRecord*>(clientp);
+
+  /* Reject attempts to connect to local/private addresses unless allowed by configuration */
+  if ((!rec->allow_private && thePeer.isPrivate()) || (!rec->allow_local && thePeer.isLocal())) {
+    rec->tpc_status = 403; // Forbidden
+    rec->m_log->Emsg(rec->log_prefix.c_str(),
+      "Connection to local/private address is forbidden");
+    close(fd);
+    return CURL_SOCKET_BAD;
+  }
+
+  rec->isIPv6 = (thePeer.isIPType(XrdNetAddrInfo::IPv6) && !thePeer.isMapped());
+
+  std::stringstream connectErrMsg;
+  if(!rec->pmarkManager.connect(fd, &(aInfo->addr), aInfo->addrlen, CONNECT_TIMEOUT, connectErrMsg)) {
+    rec->m_log->Emsg(rec->log_prefix.c_str(), "Unable to connect socket: ", connectErrMsg.str().c_str());
+    close(fd);
+    return CURL_SOCKET_BAD;
   }
 
   return fd;
@@ -298,11 +317,26 @@ bool TPCHandler::MatchesPath(const char *verb, const char *path) {
 /*                            P r e p a r e U R L                             */
 /******************************************************************************/
   
-static std::string PrepareURL(const std::string &input) {
-    if (!strncmp(input.c_str(), "davs://", 7)) {
-        return "https://" + input.substr(7);
-    }
-    return input;
+static std::string PrepareURL(const std::string &url)
+{
+  const std::string replace_schemes[] = { "davs://", "s3://", "s3s://" };
+
+  for (const auto& s : replace_schemes)
+    if (url.compare(0, s.size(), s) == 0)
+      return "https://" + url.substr(s.size());
+
+  return url;
+}
+
+static bool IsAllowedScheme(const std::string& url)
+{
+  const std::string allowed_schemes[] = { "https://", "http://" };
+
+  for (const auto& s : allowed_schemes)
+    if (url.compare(0, s.size(), s) == 0)
+      return true;
+
+  return false;
 }
 
 /******************************************************************************/
@@ -323,10 +357,21 @@ int TPCHandler::ProcessReq(XrdHttpExtReq &req) {
     header = XrdOucTUtils::caseInsensitiveFind(req.headers,"source");
     if (header != req.headers.end()) {
         std::string src = PrepareURL(header->second);
+        if (!IsAllowedScheme(src)) {
+            const char *error_src = "COPY rejected: disallowed scheme in source URL";
+            m_log.Emsg("ProcessReq", error_src, src.c_str());
+            return req.SendSimpleResp(400, NULL, NULL, error_src, 0);
+        }
         return ProcessPullReq(src, req);
     }
     header = XrdOucTUtils::caseInsensitiveFind(req.headers,"destination");
     if (header != req.headers.end()) {
+        const std::string& dst = header->second;
+        if (!IsAllowedScheme(dst)) {
+            const char *error_dst = "COPY rejected: disallowed scheme in destination URL";
+            m_log.Emsg("ProcessReq", error_dst, dst.c_str());
+            return req.SendSimpleResp(400, NULL, NULL, error_dst, 0);
+        }
         return ProcessPushReq(header->second, req);
     }
     m_log.Emsg("ProcessReq", "COPY verb requested but no source or destination specified.");
@@ -346,6 +391,8 @@ TPCHandler::~TPCHandler() {
 /******************************************************************************/
   
 TPCHandler::TPCHandler(XrdSysError *log, const char *config, XrdOucEnv *myEnv) :
+        m_allow_local(false),
+        m_allow_private(true),
         m_desthttps(false),
         m_fixed_route(false),
         m_timeout(60),
@@ -490,30 +537,43 @@ int TPCHandler::PerformHEADRequest(CURL *curl, XrdHttpExtReq &req, State &state,
     curl_easy_setopt(curl, CURLOPT_NOBODY, 0);
     // Reset the CURLOPT_TIMEOUT to no timeout (default)
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 0L);
-    if (res == CURLE_HTTP_RETURNED_ERROR) {
-        std::stringstream ss;
-        ss << "Remote server failed request while fetching file information (HEAD)";
-        std::stringstream ss2;
-        ss2 << ss.str() << ": " << curl_easy_strerror(res);
-        rec.status = 500;
-        logTransferEvent(LogMask::Error, rec, "HEAD_FAIL", ss2.str());
-        return shouldReturnErrorToClient ? req.SendSimpleResp(rec.status, NULL, NULL, generateClientErr(ss, rec, res).c_str(), 0) : -1;
-    } else if (state.GetStatusCode() >= 400) {
-        std::stringstream ss;
-        ss << "Remote side " << req.clienthost << " failed with status code " << state.GetStatusCode() << " while fetching remote file information (HEAD)";
-        rec.status = 500;
-        logTransferEvent(LogMask::Error, rec, "HEAD_FAIL", ss.str());
-        return shouldReturnErrorToClient ? req.SendSimpleResp(rec.status, NULL, NULL, generateClientErr(ss, rec).c_str(), 0) : -1;
-    } else if (res) {
-        std::stringstream ss;
-        ss << "Internal transfer failure while fetching remote file information (HEAD)";
-        std::stringstream ss2;
-        ss2 << ss.str() << " - HTTP library failed: " << curl_easy_strerror(res);
-        rec.status = 500;
-        logTransferEvent(LogMask::Error, rec, "HEAD_FAIL", ss2.str());
-        return shouldReturnErrorToClient ? req.SendSimpleResp(rec.status, NULL, NULL, generateClientErr(ss, rec, res).c_str(), 0) : -1;
-    }
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
+
     std::stringstream ss;
+
+    if (state.GetStatusCode() >= 400)
+      res = CURLE_HTTP_RETURNED_ERROR;
+
+    if (res != CURLE_OK) { /* curl failed */
+      ss << curl_easy_strerror(res);
+      switch (res) {
+      case CURLE_HTTP_RETURNED_ERROR: /* remote side may have returned an error */
+        rec.tpc_status = state.GetStatusCode(); /* relay status received from remote side to the client */
+        ss << ": remote host returned '" << rec.tpc_status << " "
+           << httpStatusToString(rec.tpc_status) << "' while fetching file size";
+        break;
+      case CURLE_COULDNT_CONNECT: /* socket callback may have failed */
+        switch (rec.tpc_status) {
+        case 403:
+          ss << ": connection to local/private addresses is forbidden";
+          break;
+        default:
+          ss << ": internal server failure";
+          rec.tpc_status = 500;
+        }
+        break;
+      default:
+        rec.tpc_status = 500;
+        state.SetErrorCode(500);
+      }
+    }
+
+    if (rec.tpc_status >= 400) {
+      logTransferEvent(LogMask::Error, rec, "HEAD_FAIL", ss.str());
+      return shouldReturnErrorToClient ? req.SendSimpleResp(rec.tpc_status, NULL, NULL, generateClientErr(ss, rec, res).c_str(), 0) : -1;
+    }
+
+    success = true;
     ss << "Successfully determined remote file information for pull request: "
        << "size=" << state.GetContentLength();
     if(state.GetReprDigest().size()) {
@@ -524,7 +584,6 @@ int TPCHandler::PerformHEADRequest(CURL *curl, XrdHttpExtReq &req, State &state,
       }
     }
     logTransferEvent(LogMask::Debug, rec, "HEAD_SUCCESS", ss.str());
-    success = true;
     return 0;
 }
 
@@ -844,6 +903,8 @@ int TPCHandler::RunCurlWithUpdates(CURL *curl, XrdHttpExtReq &req, State &state,
   
 int TPCHandler::ProcessPushReq(const std::string & resource, XrdHttpExtReq &req) {
     TPCLogRecord rec(req, TpcType::Push);
+    rec.allow_local = m_allow_local;
+    rec.allow_private = m_allow_private;
     rec.log_prefix = "PushRequest";
     rec.local = req.resource;
     rec.remote = resource;
@@ -864,14 +925,21 @@ int TPCHandler::ProcessPushReq(const std::string & resource, XrdHttpExtReq &req)
     }
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long) CURL_HTTP_VERSION_1_1);
-//  curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_setcloexec_callback);
-
+#if CURL_AT_LEAST_VERSION(7, 85, 0)
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR,       "https,http");
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https,http");
+#else
+    long protocols = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, protocols);
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, protocols);
+#endif
     curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
     curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, &rec);
     curl_easy_setopt(curl, CURLOPT_CLOSESOCKETFUNCTION, closesocket_callback);
     curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);
     curl_easy_setopt(curl, CURLOPT_CLOSESOCKETDATA, &rec);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, CONNECT_TIMEOUT);
+
     auto query_header = XrdOucTUtils::caseInsensitiveFind(req.headers,"xrd-http-fullresource");
     std::string redirect_resource = req.resource;
     if (query_header != req.headers.end()) {
@@ -927,6 +995,8 @@ int TPCHandler::ProcessPushReq(const std::string & resource, XrdHttpExtReq &req)
   
 int TPCHandler::ProcessPullReq(const std::string &resource, XrdHttpExtReq &req) {
     TPCLogRecord rec(req,TpcType::Pull);
+    rec.allow_local = m_allow_local;
+    rec.allow_private = m_allow_private;
     rec.log_prefix = "PullRequest";
     rec.local = req.resource;
     rec.remote = resource;
@@ -945,6 +1015,7 @@ int TPCHandler::ProcessPullReq(const std::string &resource, XrdHttpExtReq &req) 
         logTransferEvent(LogMask::Error, rec, "PULL_FAIL", ss.str());
         return req.SendSimpleResp(rec.status, NULL, NULL, generateClientErr(ss, rec).c_str(), 0);
     }
+
     // ddavila 2023-01-05:
     // The following change was required by the Rucio/SENSE project where
     // multiple IP addresses, each from a different subnet, are assigned to a
@@ -979,7 +1050,14 @@ int TPCHandler::ProcessPullReq(const std::string &resource, XrdHttpExtReq &req) 
     }
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long) CURL_HTTP_VERSION_1_1);
-//  curl_easy_setopt(curl,CURLOPT_SOCKOPTFUNCTION,sockopt_setcloexec_callback);
+#if CURL_AT_LEAST_VERSION(7, 85, 0)
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR,       "https,http");
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https,http");
+#else
+    long protocols = CURLPROTO_HTTP | CURLPROTO_HTTPS;
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, protocols);
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, protocols);
+#endif
     curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_callback);
     curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, &rec);
     curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_callback);

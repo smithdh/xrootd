@@ -68,11 +68,13 @@ private:
 
     struct TPCLogRecord {
 
-        TPCLogRecord(XrdHttpExtReq & req, const TpcType tpcType) : bytes_transferred( -1 ), status( -1 ),
-                         tpc_status(-1), streams( 1 ), isIPv6(false), mReq(req), pmarkManager(mReq,tpcType), mTpcType(tpcType)
+        TPCLogRecord(XrdHttpExtReq &req, const TpcType tpcType)
+          : bytes_transferred(-1), status(-1), tpc_status(-1), streams(1), isIPv6(false),
+            allow_local(false), allow_private(false), mReq(req), pmarkManager(mReq, tpcType), mTpcType(tpcType)
         {
-         gettimeofday(&begT, 0); // Set effective start time
+          gettimeofday(&begT, 0); // Set effective start time
         }
+
        ~TPCLogRecord();
 
         std::string log_prefix;
@@ -87,6 +89,8 @@ private:
         int tpc_status;
         unsigned int streams;
         bool isIPv6;
+        bool allow_local;
+        bool allow_private;
         XrdHttpExtReq & mReq;
         XrdHttpTpc::PMarkManager pmarkManager;
         XrdSysError * m_log;
@@ -166,6 +170,8 @@ private:
     static int m_marker_period;
     static size_t m_block_size;
     static size_t m_small_block_size;
+    bool m_allow_local;
+    bool m_allow_private;
     bool m_desthttps;
     bool m_fixed_route;  // If 'true' the Destination IP in an HTTP-TPC is forced to be the same as the IP used to contact the server
                            // when 'false' any IP available can be selected

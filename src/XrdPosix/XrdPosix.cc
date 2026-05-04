@@ -504,13 +504,12 @@ extern "C"
     char buff[2048];
     char unref[2049];
 
-    if (!(flags & AT_SYMLINK_NOFOLLOW)){
+    if (!(flags & AT_SYMLINK_NOFOLLOW)) {
       // We need to follow until path is no longer a link
-      ssize_t res=XrdResolveLink(path, unref);
+      ssize_t res = XrdResolveLink(path, unref);
       if (res < 0) return res;
       // links are pointing to file unref now which is not a link
     } else {
-      if (!path) {errno = EFAULT; return -1;}
       strncpy(unref, path, 2048);
     }
     if (char *myPath = XrootPath.URL(unref, buff, sizeof(buff))) {
@@ -529,6 +528,8 @@ extern "C"
 #endif
 #endif
     }
+  } else {
+    errno = EFAULT;
   }
   return -1;
 }
@@ -1094,18 +1095,17 @@ int XrdPosix_Statx(int dirfd, const char *path, int flags,
     char buff[2048];
     char unref[2049];
 
-    if (!(flags & AT_SYMLINK_NOFOLLOW)){
+    if (!(flags & AT_SYMLINK_NOFOLLOW)) {
       // We need to follow until path is no longer a link
-      ssize_t res=XrdResolveLink(path, unref);
+      ssize_t res = XrdResolveLink(path, unref);
       if (res < 0) return res;
     } else {
-      if (!path) {errno = EFAULT; return -1;}
       strncpy(unref, path, 2048);
     }
     if (char *myPath = XrootPath.URL(unref, buff, sizeof(buff))) {
       struct stat st{};
       if (int ret = XrdPosix_Stat(myPath, &st))
-	return ret;
+        return ret;
       XrdSysStatxHelpers::Stat2Statx(st, *stx);
       return 0;
     } else {
@@ -1117,6 +1117,8 @@ int XrdPosix_Statx(int dirfd, const char *path, int flags,
       return -1;
 #endif
     }
+  } else {
+    errno = EFAULT;
   }
   return -1;
 }

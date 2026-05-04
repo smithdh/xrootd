@@ -6,6 +6,35 @@ Release Notes
 =============
 
 -------------
+Version 5.9.3
+-------------
+
++ **Major bug fixes**
+  **[XrdHttpTpc]** Filter source/destination URLs through allowed list of schemes
+  **[XrdHttpTpc]** Limit curl handle to http and https protocols only
+  **[XrdHttp]** Encode the key of the opaque query string
+  **[XrdMacaroons]** Reject user-provided caveats with reserved keys
+
++ **Minor bug fixes**
+  **[XrdOuc]** Ensure XList is initialized in XrdOucNSWalk constructor
+  **[XrdSciTokens]** Close token and ACL cleanup leaks
+  **[XrdSciTokens]** Fix ACL cache TTL computation from token expiry
+  **[XrdSciTokens]** Harden token input
+  **[XrdSciTokens]** Match rules based on path-component boundary
+  **[XrdSciTokens]** Serialize issuer reads and atomic reconfig state swap
+  **[XrdSciTokens]** Tighten group and subject-claim memory handling
+  **[XrdSecgsi]** Remove dead code
+  **[XrdSsi]** Fix GCC 16 -Wmaybe-uninitialized compiler warning
+
++ **Miscellaneous**
+  **[CI]** Check ABI against merge-base of HEAD and latest tag
+  **[CI]** Publish binary Python wheels for Linux/macOS on aarch64/x86_64
+  **[CMake]** Set install_name property on macOS for Python wheel builds
+  **[XrdHttpTpc]** Add option to allow/deny transfers to/from local/private addresses
+  **[XrdHttpTpc]** Convert s3(s):// scheme to https:// in tpc source/destination URLs
+  **[XrdHttpTpc]** Improve error handling in TPCHandler::DetermineXferSize
+
+-------------
 Version 5.9.2
 -------------
 

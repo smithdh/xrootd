@@ -6,6 +6,27 @@ Release Notes
 =============
 
 -------------
+Version 6.0.1
+-------------
+
++ **Bugfixes**
+  All bugfixes from XRootD 5.9.3 are also in XRootD 6.0.1
+  **[Tests]** Fix kerberos tests when /usr/sbin is not in PATH
+  **[XrdClHttp]** Add catch-all work-around for missing gettid (#2769)
+  **[XrdClS3]** Fix mistakenly reversed if condition (#2776)
+  **[XrdClS3]** Fix plugin defaults to allow empty region to be set (#2776)
+  **[XrdOssArc]** Add #include "XrdSys/XrdSysPlatform.hh" for MAXPATHLEN (#2769)
+  **[XrdSys]** Also check for GNU in statx (#2769)
+
++ **Miscellaneous**
+  **[DEB/RPM]** Change file to avoid sed during install (#2769)
+  **[Server]** Make redirect plugin available to other protocols (e.g. http).
+  **[Tests]** Add link to atomic library for some 32 bit architectures (#2774)
+  **[XrdHttp]** Fix crash due to unaligned memory access (#2777)
+  **[XrdPosix]** Add support for links, openat and fstatat (#2775)
+  **[XrdSys]** Include C-style headers to allow XrdPosix to be used in a C context (#2779)
+
+-------------
 Version 6.0.0
 -------------
 

@@ -45,6 +45,10 @@
 #include <openssl/buffer.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/core_names.h>
+#include <openssl/evp.h>
+#endif
 # include "sys/param.h"
 
 #include <pthread.h>
@@ -270,16 +274,27 @@ void calcHashes(
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 
-  mac = EVP_MAC_fetch(0, "sha256", 0);
+  mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
+  if (!mac) {
+      // Fail closed: caller treats empty hash as auth failure.
+      return;
+  }
   ctx = EVP_MAC_CTX_new(mac);
-
   if (!ctx) {
+     EVP_MAC_free(mac);
      return;
   }
 
+  OSSL_PARAM params[2] = {
+      OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, (char*)"SHA256", 0),
+      OSSL_PARAM_construct_end()
+  };
 
-  EVP_MAC_init(ctx, (const unsigned char *) key, strlen(key), 0);
-
+  if (!EVP_MAC_init(ctx, (const unsigned char *) key, strlen(key), params)) {
+      EVP_MAC_CTX_free(ctx);
+      EVP_MAC_free(mac);
+      return;
+  }
 
   if (fn)
     EVP_MAC_update(ctx, (const unsigned char *) fn,
